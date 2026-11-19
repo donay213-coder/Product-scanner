@@ -58,6 +58,14 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .src.warn{border-color:var(--red);color:var(--red)}
 .list a{color:inherit;text-decoration-thickness:1px;text-underline-offset:3px}
 .sub{font-size:13px;color:var(--mut)}
+.grades{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:12px}
+.ns{display:inline-flex;align-items:center;gap:2px}
+.ns i{font-style:normal;font-weight:800;font-size:12px;line-height:1;display:grid;place-items:center;width:20px;height:24px;opacity:.38}
+.ns i:first-child{border-radius:6px 0 0 6px}.ns i:last-child{border-radius:0 6px 6px 0}
+.ns i.on{opacity:1;width:32px;height:36px;font-size:20px;border-radius:8px;box-shadow:0 0 0 2px var(--card),0 0 0 3.5px var(--ink)}
+.chip{font-size:13px;border:1.5px solid var(--line);border-radius:99px;padding:3px 10px;white-space:nowrap}
+.chip b{font-weight:800}
+.g-a{background:#038141;color:#fff}.g-b{background:#85bb2f;color:#111}.g-c{background:#fecb02;color:#111}.g-d{background:#ee8100;color:#111}.g-e{background:#e63e11;color:#fff}
 .del{border:0;background:none;color:var(--mut);min-height:32px;padding:0 4px;font-size:13px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chips a{font-size:14px;min-height:40px;padding:0 12px;border-radius:99px;border:1.5px solid var(--line);display:inline-flex;align-items:center;color:var(--ink);text-decoration:none;background:var(--card)}
@@ -99,6 +107,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
   <h2>Product</h2>
   <div class="card">
     <div class="prod" id="prod"></div>
+    <div class="grades" id="grades"></div>
     <div id="best"></div>
   </div>
   <form class="ean" id="nameForm">
@@ -429,11 +438,11 @@ async function loadCjb(){ // supermarktprijzen (Checkjebon), 12 uur bewaard op d
 }
 async function viaBrowser(code,qText){ // zonder server: alles in de browser
   const [p,pr]=await Promise.allSettled([
-    code?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url`):null,
+    code?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade`):null,
     code?getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`):null
   ]);
   const o=p.status==="fulfilled"&&p.value&&p.value.status===1?p.value.product:null;
-  const product=o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||""}:null;
+  const product=o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||""}:null;
   const prices=[],seen=new Set(),sources={standalone:true,openprices:!code?"niet gevraagd":pr.status==="fulfilled"?"ok":"niet bereikbaar"};
   if(pr.status==="fulfilled"&&pr.value)for(const it of pr.value.items||[]){
     if(it.price==null)continue;const L=it.location||{};const shop=L.osm_name||"Onbekende winkel",place=[L.osm_address_city,L.osm_address_country].filter(Boolean).join(", ");
@@ -455,7 +464,7 @@ async function lookup(code,q){
   if(!q&&!/^\d{6,14}$/.test(code)){showErr("Dat lijkt geen geldige barcode.");return}
   showErr("");$("eanInput").value=code;$("result").hidden=false;
   $("prod").innerHTML=`<div class="ph"></div><div><h3>Bezig met zoeken…</h3><div class="mut">${esc(q||"EAN "+code)}</div></div>`;
-  $("best").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";
+  $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";
   $("result").scrollIntoView({behavior:"smooth",block:"start"});
   let d;
   try{
@@ -482,10 +491,22 @@ function sourceNote(s){
   if(s.openprices&&s.openprices!=="niet gevraagd")t.push(s.openprices==="ok"?"Open Prices (gebruikersprijzen)":"Open Prices niet bereikbaar");
   return t.join(" · ")+". Supermarktprijzen zijn online prijzen; check de actie-links voor weekaanbiedingen.";
 }
+const NOVA={1:"onbewerkt",2:"bewerkte ingrediënten",3:"bewerkt",4:"ultrabewerkt"};
+const grade=g=>{g=String(g||"").toLowerCase();return /^[a-e]$/.test(g)?g:""};
+function gradesHTML(p){
+  if(!p||!p.name)return "";
+  const n=grade(p.nutri),e=grade(p.eco),nv=NOVA[+p.nova]?+p.nova:0;
+  const out=[];
+  out.push(n?`<span class="ns" role="img" aria-label="Nutri-Score ${n.toUpperCase()}" title="Nutri-Score: A is het gunstigst, E het minst gunstig">${"abcde".split("").map(l=>`<i class="g-${l}${l===n?" on":""}">${l.toUpperCase()}</i>`).join("")}</span>`:`<span class="mut">Geen Nutri-Score bekend</span>`);
+  if(nv)out.push(`<span class="chip" title="NOVA-groep: hoe sterk een product is bewerkt">NOVA <b>${nv}</b> · ${NOVA[nv]}</span>`);
+  if(e)out.push(`<span class="chip" title="Eco-Score: milieu-impact, A is het gunstigst">Eco-Score <b>${e.toUpperCase()}</b></span>`);
+  return out.join("");
+}
 function render(){
   const d=current.data,p=d.product||{},title=p.name||(d.query&&!current.code?d.query:"Onbekend product");
   $("prod").innerHTML=`${p.img?`<img src="${esc(safeUrl(p.img))}" alt="">`:`<div class="ph"></div>`}<div><h3>${esc(title)}</h3><div class="mut">${esc([p.brand,p.qty].filter(Boolean).join(" · ")||(p.name?"":"Typ hieronder de naam om toch te vergelijken"))}</div>${current.code?`<div class="mut">EAN ${esc(current.code)}</div>`:""}</div>`;
   $("nameInput").value=d.query&&d.query!==current.code?d.query:"";
+  $("grades").innerHTML=gradesHTML(d.product);
   const list=collectPrices(),eurs=list.filter(x=>x.cur==="EUR"),best=eurs[0];
   $("best").innerHTML=best?`<div class="label"><div><div class="mut" style="color:#333">Goedkoopst gevonden</div><div class="where">${esc(best.shop)}${best.place?", "+esc(best.place):""}</div></div><div class="big">${eur(best.price)}</div>${eurs.length>1?`<div style="grid-column:1/-1;font-size:14px">Tot ${eur(eurs[eurs.length-1].price-best.price)} goedkoper dan de duurste van ${eurs.length} aanbieders</div>`:""}</div>`:"";
   $("prices").innerHTML=list.length?list.map(x=>{
