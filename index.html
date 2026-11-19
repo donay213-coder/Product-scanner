@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Prijsscanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: nuchter en snel, als een kassabon
+   IDEA: een schapkaartje / prijsetiket uit de supermarkt
+   PICTURE: de camerazoeker met scanlijn, daarna het etiket met de laagste prijs
+   COLOUR and TYPE: wit/zwart, etiketgeel #ffd400, rood #d7261e voor duurder; Schibsted Grotesk
+   LAYOUT: één kolom, max 640px, duim-vriendelijk */
+:root{color-scheme:light dark;--bg:light-dark(#f2f0ec,#121212);--card:light-dark(#fff,#1d1d1d);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#666,#a5a5a5);--line:light-dark(#dedad3,#333);--tag:#ffd400;--red:#d7261e;--ok:#0a7a3d}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Schibsted Grotesk",system-ui,sans-serif;overflow-x:clip}
+main{max-width:640px;margin:0 auto;padding:16px 16px 64px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 0 14px}
+h1{font-size:32px;line-height:1.05;margin:0;font-weight:800}
+h1 span{background:var(--tag);color:#111;padding:0 6px}
+h2{font-size:20px;margin:28px 0 10px}
+.mut{color:var(--mut);font-size:14px}
+.view{position:relative;aspect-ratio:4/3;background:#000;border-radius:14px;overflow:hidden;display:grid;place-items:center}
+.view video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.frame{position:absolute;inset:22% 12%;border:3px solid var(--tag);border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
+.frame::after{content:"";position:absolute;left:4%;right:4%;top:50%;height:2px;background:var(--red);animation:scan 1.6s ease-in-out infinite alternate}
+@keyframes scan{from{transform:translateY(-40px)}to{transform:translateY(40px)}}
+@media(prefers-reduced-motion:reduce){.frame::after{animation:none}}
+.idle{color:#ddd;text-align:center;padding:24px;font-size:15px;position:relative}
+.idle svg{display:block;margin:0 auto 10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+button,.btn{font:inherit;font-weight:600;min-height:44px;padding:0 16px;border-radius:10px;border:1.5px solid var(--ink);background:var(--card);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+button.pri{background:var(--ink);color:var(--bg)}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--tag);outline-offset:2px}
+input,select{font:inherit;font-size:16px;min-height:44px;padding:0 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--ink)}
+form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.prod{display:grid;grid-template-columns:88px minmax(0,1fr);gap:14px;align-items:center}
+.prod img,.ph{width:88px;height:88px;object-fit:contain;background:#fff;border-radius:10px;border:1px solid var(--line)}
+.prod h3{margin:0 0 2px;font-size:20px;line-height:1.2}
+.label{position:relative;background:var(--tag);color:#111;border-radius:6px;padding:14px 16px;margin-top:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:end}
+.label .big{font-size:clamp(36px,10vw,52px);font-weight:800;line-height:1;white-space:nowrap}
+.label .where{font-weight:600}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.list li:last-child{border:0}
+.p{font-weight:800;font-size:18px;text-align:right;white-space:nowrap}
+.diff{font-size:13px;text-align:right;white-space:nowrap;color:var(--red)}
+.diff.best{color:var(--ok)}
+.src{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;margin-left:6px;color:var(--mut);white-space:nowrap}
+.src.warn{border-color:var(--red);color:var(--red)}
+.list a{color:inherit;text-decoration-thickness:1px;text-underline-offset:3px}
+.sub{font-size:13px;color:var(--mut)}
+.del{border:0;background:none;color:var(--mut);min-height:32px;padding:0 4px;font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips a{font-size:14px;min-height:40px;padding:0 12px;border-radius:99px;border:1.5px solid var(--line);display:inline-flex;align-items:center;color:var(--ink);text-decoration:none;background:var(--card)}
+.add{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px}
+@media(max-width:480px){.add{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.add button{grid-column:1/-1}}
+.hist button{min-height:40px;font-weight:400;font-size:14px;border-color:var(--line)}
+.msg{padding:12px 14px;border-radius:10px;background:var(--card);border:1px dashed var(--line);font-size:15px}
+.err{border-color:var(--red)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Prijs<span>scanner</span></h1><span class="mut">Scan, vergelijk, bespaar</span></header>
+
+<section>
+  <div class="view" id="view">
+    <video id="video" playsinline muted hidden></video>
+    <div class="frame" id="frame" hidden></div>
+    <div class="idle" id="idle">
+      <svg width="120" height="56" viewBox="0 0 120 56" aria-hidden="true"><g fill="#ffd400"><rect x="0" width="4" height="56"/><rect x="8" width="2" height="56"/><rect x="14" width="6" height="56"/><rect x="24" width="2" height="56"/><rect x="30" width="4" height="56"/><rect x="38" width="2" height="56"/><rect x="44" width="8" height="56"/><rect x="56" width="2" height="56"/><rect x="62" width="4" height="56"/><rect x="70" width="6" height="56"/><rect x="80" width="2" height="56"/><rect x="86" width="4" height="56"/><rect x="94" width="2" height="56"/><rect x="100" width="6" height="56"/><rect x="110" width="2" height="56"/><rect x="116" width="4" height="56"/></g></svg>
+      Richt de camera op de streepjescode van een product
+    </div>
+  </div>
+  <div class="row">
+    <button class="pri" id="startBtn">Camera starten</button>
+    <button id="stopBtn" hidden>Stoppen</button>
+    <label class="btn" for="photo">Foto kiezen</label>
+    <input type="file" id="photo" accept="image/*" capture="environment" hidden>
+  </div>
+  <form class="ean" id="eanForm">
+    <input id="eanInput" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="Of typ de barcode (EAN)" aria-label="Barcode">
+    <button type="submit">Zoek</button>
+  </form>
+  <p class="msg err" id="err" hidden></p>
+</section>
+
+<section id="result" hidden>
+  <h2>Product</h2>
+  <div class="card">
+    <div class="prod" id="prod"></div>
+    <div id="best"></div>
+  </div>
+  <form class="ean" id="nameForm">
+    <input id="nameInput" placeholder="Klopt het product niet? Typ de naam, bv. Calvé pindakaas 650 g" aria-label="Productnaam">
+    <button type="submit">Zoek</button>
+  </form>
+
+  <h2>Prijzen per winkel</h2>
+  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p></div>
+
+  <h2>Prijs toevoegen</h2>
+  <form class="add card" id="addForm">
+    <select id="shop" aria-label="Winkel"></select>
+    <input id="price" inputmode="decimal" placeholder="Prijs, bv. 2,49" aria-label="Prijs in euro" required>
+    <button class="pri" type="submit">Opslaan</button>
+  </form>
+  <p class="mut">Prijzen die je zelf invoert worden op dit apparaat bewaard en tellen mee in de vergelijking.</p>
+
+  <h2>Acties en kortingen</h2>
+  <div class="chips" id="promos"></div>
+  <p class="mut">Weekacties wisselen vaak; de links openen de actuele aanbiedingenpagina's.</p>
+
+  <h2>Zoek in de supermarkt</h2>
+  <div class="chips" id="chips"></div>
+
+  <h2>Webshops en prijsvergelijkers</h2>
+  <div class="chips" id="webshops"></div>
+</section>
+
+<section id="histWrap" hidden>
+  <h2>Eerder gescand</h2>
+  <div class="row hist" id="hist"></div>
+</section>
+</main>
+
+<script>window.STANDALONE=true;</script>
+<script>(function(){
+'use strict';
+// Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
+// Er bestaat geen gedeelde EAN-database voor supermarkten, dus we matchen op merk + naam + inhoud.
+
+const STOP = new Set(['de', 'het', 'een', 'en', 'met', 'van', 'voor', 'per', 'stuk', 'stuks', 'pak', 'fles', 'blik', 'zak', 'doos', 'pot', 'tray', 'x', 'bio', 'a', 'of', 'in', 'op', 'the', 'and']);
+const UNIT = 'kg|gram|gr|g|liter|ltr|ml|cl|dl|l';
+const MULTI = new RegExp(`(\\d+)\\s*[x×]\\s*(\\d+(?:[.,]\\d+)?)\\s*(${UNIT})\\b`, 'gi');
+const SINGLE = new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${UNIT})\\b`, 'gi');
+const COUNT = /(\d+)\s*(?:stuks|stuk|st)\b/gi;
+
+const num = (s) => parseFloat(String(s).replace(',', '.'));
+
+function toBase(n, u) {
+  u = u.toLowerCase();
+  if (u === 'kg') return { unit: 'g', amount: n * 1000 };
+  if (['g', 'gr', 'gram'].includes(u)) return { unit: 'g', amount: n };
+  if (['l', 'liter', 'ltr'].includes(u)) return { unit: 'ml', amount: n * 1000 };
+  if (u === 'dl') return { unit: 'ml', amount: n * 100 };
+  if (u === 'cl') return { unit: 'ml', amount: n * 10 };
+  return { unit: 'ml', amount: n };
+}
+
+function parseSize(s) {
+  s = String(s || '').toLowerCase();
+  if (!s) return null;
+  if (/per\s*stuk/.test(s)) return { unit: 'st', amount: 1 };
+  let m = new RegExp(MULTI.source, 'i').exec(s);
+  if (m) { const b = toBase(num(m[2]), m[3]); return { unit: b.unit, amount: b.amount * Number(m[1]) }; }
+  m = new RegExp(SINGLE.source, 'i').exec(s);
+  if (m) return toBase(num(m[1]), m[2]);
+  m = new RegExp(COUNT.source, 'i').exec(s);
+  if (m) return { unit: 'st', amount: Number(m[1]) };
+  return null;
+}
+
+function norm(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, ' en ').replace(/[^a-z0-9%,. ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const stripSize = (s) => String(s || '').replace(MULTI, ' ').replace(SINGLE, ' ').replace(COUNT, ' ');
+
+function tokens(s) {
+  const out = [];
+  for (let w of norm(s).split(' ')) {
+    w = w.replace(/^[.,%]+|[.,%]+$/g, '');
+    if (!w || STOP.has(w)) continue;
+    if (w.length < 2 && !/\d/.test(w)) continue;
+    if (w.length > 4 && w.endsWith('s')) w = w.slice(0, -1); // chips ~ chip, kruidenthee ~ kruidenthee
+    out.push(w);
+  }
+  return out;
+}
+
+function sizeCompare(a, b) {
+  if (!a || !b) return 'unknown';
+  if (a.unit !== b.unit) return 'diff';
+  return Math.abs(a.amount - b.amount) / Math.max(a.amount, b.amount) < 0.03 ? 'same' : 'diff';
+}
+
+function buildQuery({ name, brand, qty, q } = {}) {
+  const text = q || [brand, name].filter(Boolean).join(' ');
+  const toks = new Set(tokens(stripSize(text)));
+  const brandToks = new Set(q ? [] : tokens(brand));
+  for (const t of brandToks) toks.add(t);
+  // Typt iemand zelf een naam, dan bepaalt die tekst het product; de inhoud van de gescande barcode telt dan niet mee.
+  return { text, tokens: toks, brand: brandToks, size: q ? parseSize(text) : parseSize(qty) || parseSize(text) };
+}
+
+function prepareItem(p) {
+  const price = Number(p.p);
+  if (!p || !p.n || !Number.isFinite(price) || price <= 0) return null;
+  return { n: String(p.n), l: p.l || '', p: price, s: p.s || '', tokens: new Set(tokens(stripSize(p.n))), size: parseSize(p.s) || parseSize(p.n) };
+}
+
+function score(q, it) {
+  let ov = 0;
+  for (const t of q.tokens) if (it.tokens.has(t)) ov++;
+  if (!ov || !it.tokens.size) return 0;
+  const rec = ov / q.tokens.size, prec = ov / it.tokens.size;
+  let f = 0.6 * rec + 0.4 * prec;
+  if (q.brand.size) {
+    let hit = false;
+    for (const t of q.brand) if (it.tokens.has(t)) { hit = true; break; }
+    if (!hit) f *= 0.35; // ander merk of huismerk: niet hetzelfde product
+  }
+  const sc = sizeCompare(q.size, it.size);
+  if (sc === 'same') f = Math.min(1, f + 0.15);
+  else if (sc === 'diff') f *= 0.4;
+  return f;
+}
+
+function unitPrice(price, size) {
+  if (!size || !size.amount) return null;
+  if (size.unit === 'g') return { v: (price / size.amount) * 1000, label: 'kg' };
+  if (size.unit === 'ml') return { v: (price / size.amount) * 1000, label: 'l' };
+  return { v: price / size.amount, label: 'stuk' };
+}
+
+// Beste match per keten. chains: [{key, items:[prepared]}]
+function findMatches(chains, q, { min = 0.6, high = 0.85 } = {}) {
+  if (!q.tokens.size) return [];
+  const out = [];
+  for (const c of chains) {
+    let best = null, bs = 0;
+    for (const it of c.items) {
+      const s = score(q, it);
+      if (s > bs || (s === bs && best && s > 0 && it.p < best.p)) { bs = s; best = it; }
+    }
+    if (best && bs >= min) {
+      const up = unitPrice(best.p, best.size);
+      out.push({ chain: c.key, name: best.n, link: best.l, price: best.p, size: best.s, unit: up ? { v: Math.round(up.v * 100) / 100, label: up.label } : null, score: Math.round(bs * 100) / 100, confidence: bs >= high ? 'hoog' : 'middel' });
+    }
+  }
+  return out.sort((a, b) => a.price - b.price);
+}
+
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
+
+})();</script>
+<script>(function(){
+'use strict';
+// Weergavenamen, zoek- en aanbiedingenlinks. Zoeklinks zijn gewone zoekpagina's van de winkels;
+// de slugs voor aanbiedingen staan op supermarktscanner.nl.
+
+const e = encodeURIComponent;
+
+const CHAINS = {
+  ah: { name: 'Albert Heijn', search: (q) => `https://www.ah.nl/zoeken?query=${e(q)}`, product: (l) => `https://www.ah.nl/producten/product/${l}`, promo: 'https://supermarktscanner.nl/albert-heijn-aanbiedingen' },
+  jumbo: { name: 'Jumbo', search: (q) => `https://www.jumbo.com/producten/?searchTerms=${e(q)}`, promo: 'https://supermarktscanner.nl/jumbo-aanbiedingen' },
+  plus: { name: 'Plus', search: (q) => `https://www.plus.nl/zoekresultaten?SearchTerm=${e(q)}`, promo: 'https://supermarktscanner.nl/plus-aanbiedingen' },
+  dirk: { name: 'Dirk', search: (q) => `https://www.dirk.nl/zoeken/producten/${e(q)}`, promo: 'https://supermarktscanner.nl/dirk-aanbiedingen' },
+  hoogvliet: { name: 'Hoogvliet', search: (q) => `https://www.hoogvliet.com/zoeken?q=${e(q)}`, promo: 'https://supermarktscanner.nl/hoogvliet-aanbiedingen' },
+  dekamarkt: { name: 'DekaMarkt', search: (q) => `https://www.dekamarkt.nl/zoeken?q=${e(q)}`, promo: 'https://supermarktscanner.nl/dekamarkt-aanbiedingen' },
+  poiesz: { name: 'Poiesz', search: (q) => `https://webwinkel.poiesz-supermarkten.nl/zoeken?q=${e(q)}`, promo: 'https://supermarktscanner.nl/poiesz-aanbiedingen' },
+  vomar: { name: 'Vomar', search: (q) => `https://www.vomar.nl/zoeken?search=${e(q)}` },
+  coop: { name: 'Coop', search: (q) => `https://www.coop.nl/zoeken?SearchTerm=${e(q)}` },
+  spar: { name: 'SPAR', search: (q) => `https://www.spar.nl/zoeken/?q=${e(q)}` },
+  aldi: { name: 'Aldi', search: (q) => `https://www.aldi.nl/zoeken.html?query=${e(q)}` },
+  lidl: { name: 'Lidl', search: (q) => `https://www.lidl.nl/q/search?q=${e(q)}` },
+  janlinders: { name: 'Jan Linders', search: (q) => `https://www.janlinders.nl/zoeken?q=${e(q)}` },
+  picnic: { name: 'Picnic' },
+};
+
+const WEBSHOPS = [
+  ['Google Shopping', (q) => `https://www.google.nl/search?tbm=shop&q=${e(q)}`],
+  ['Tweakers Pricewatch', (q) => `https://tweakers.net/pricewatch/zoeken/?keyword=${e(q)}`],
+  ['Beslist.nl', (q) => `https://www.beslist.nl/products/r/${e(q)}/`],
+  ['Kieskeurig', (q) => `https://www.kieskeurig.nl/zoeken?q=${e(q)}`],
+  ['bol', (q) => `https://www.bol.com/nl/nl/s/?searchtext=${e(q)}`],
+  ['Amazon.nl', (q) => `https://www.amazon.nl/s?k=${e(q)}`],
+  ['Coolblue', (q) => `https://www.coolblue.nl/zoeken?query=${e(q)}`],
+  ['Kruidvat', (q) => `https://www.kruidvat.nl/search?q=${e(q)}`],
+  ['Etos', (q) => `https://www.etos.nl/search/?q=${e(q)}`],
+  ['Action', (q) => `https://www.action.com/nl-nl/search/?q=${e(q)}`],
+];
+
+const DEAL_SITES = [
+  ['Beste aanbiedingen (Supermarktscanner)', 'https://supermarktscanner.nl/beste-supermarkt-aanbiedingen'],
+  ['Supermarktaanbiedingen.com', 'https://www.supermarktaanbiedingen.com/'],
+  ['Folders.nl', 'https://www.folders.nl/'],
+];
+
+function chainInfo(key) {
+  const k = String(key).toLowerCase().replace(/[^a-z]/g, '');
+  return { key: k, ...(CHAINS[k] || { name: String(key).charAt(0).toUpperCase() + String(key).slice(1) }) };
+}
+
+function links(text) {
+  return {
+    shops: Object.values(CHAINS).filter((c) => c.search).map((c) => ({ name: c.name, url: c.search(text) })),
+    webshops: WEBSHOPS.map(([name, f]) => ({ name, url: f(text) })),
+    promos: [
+      ...Object.values(CHAINS).filter((c) => c.promo).map((c) => ({ name: `${c.name} aanbiedingen`, url: c.promo })),
+      ...DEAL_SITES.map(([name, url]) => ({ name, url })),
+    ],
+  };
+}
+
+const API = { CHAINS, chainInfo, links };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Shops = API;
+
+})();</script>
+<script>
+{
+const SHOPS=[
+ ["Albert Heijn","https://www.ah.nl/zoeken?query="],
+ ["Jumbo","https://www.jumbo.com/zoeken/producten?searchTerms="],
+ ["Lidl","https://www.lidl.nl/q/search?q="],
+ ["Aldi","https://www.aldi.nl/zoeken.html?query="],
+ ["Plus","https://www.plus.nl/zoekresultaten?SearchTerm="],
+ ["Dirk","https://www.dirk.nl/zoeken/producten/"],
+ ["Hoogvliet","https://www.hoogvliet.com/zoeken?q="],
+ ["Vomar","https://www.vomar.nl/zoeken?search="],
+ ["DekaMarkt","https://www.dekamarkt.nl/zoeken?q="],
+ ["Coop","https://www.coop.nl/zoeken?SearchTerm="],
+ ["Spar","https://www.spar.nl/zoeken/?q="],
+ ["Kruidvat","https://www.kruidvat.nl/search?q="],
+ ["Etos","https://www.etos.nl/search/?q="],
+ ["Action","https://www.action.com/nl-nl/search/?q="],
+ ["Checkjebon","https://www.checkjebon.nl/?q="]
+];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const eur=n=>new Intl.NumberFormat("nl-NL",{style:"currency",currency:"EUR"}).format(n);
+const money=(n,c)=>{try{return new Intl.NumberFormat("nl-NL",{style:"currency",currency:c||"EUR"}).format(n)}catch(e){return n.toFixed(2)+" "+(c||"")}};
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let stream=null,scanning=false,zx=null,current=null,lastCode="",lastAt=0;
+
+$("shop").innerHTML=SHOPS.filter(s=>s[0]!=="Checkjebon").map(s=>`<option>${esc(s[0])}</option>`).join("")+"<option>Andere winkel</option>";
+$("shop").value=store.get("lastShop","Albert Heijn");
+
+function showErr(t){$("err").textContent=t;$("err").hidden=!t}
+
+/* ---------- Scannen ---------- */
+const FORMATS=["ean_13","ean_8","upc_a","upc_e"];
+async function nativeDetector(){
+  if(!("BarcodeDetector" in window))return null;
+  try{const ok=await BarcodeDetector.getSupportedFormats();const f=FORMATS.filter(x=>ok.includes(x));return f.length?new BarcodeDetector({formats:f}):null}catch(e){return null}
+}
+function loadZXing(){
+  if(window.ZXing)return Promise.resolve();
+  return new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js";s.onload=res;s.onerror=()=>rej(new Error("Scanbibliotheek kon niet laden"));document.head.appendChild(s)});
+}
+async function startCam(){
+  showErr("");
+  if(!navigator.mediaDevices?.getUserMedia){showErr("Camera niet beschikbaar. Open de app via https, of gebruik 'Foto kiezen' of typ de barcode.");return}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});
+  }catch(e){showErr("Geen toegang tot de camera ("+e.name+"). Geef toestemming in je browser, of gebruik 'Foto kiezen'.");return}
+  const v=$("video");v.srcObject=stream;await v.play();
+  v.hidden=false;$("frame").hidden=false;$("idle").hidden=true;$("startBtn").hidden=true;$("stopBtn").hidden=false;
+  scanning=true;
+  const det=await nativeDetector();
+  if(det){
+    const tick=async()=>{if(!scanning)return;try{const r=await det.detect(v);if(r[0])onCode(r[0].rawValue)}catch(e){}setTimeout(tick,180)};tick();
+  }else{
+    try{await loadZXing()}catch(e){showErr(e.message);return}
+    const hints=new Map();hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);
+    zx=new ZXing.BrowserMultiFormatReader(hints);
+    const c=document.createElement("canvas"),ctx=c.getContext("2d",{willReadFrequently:true});
+    const tick=()=>{if(!scanning)return;
+      if(v.videoWidth){c.width=v.videoWidth;c.height=v.videoHeight;ctx.drawImage(v,0,0);
+        try{const src=new ZXing.HTMLCanvasElementLuminanceSource(c),bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(src));const r=zx.decodeBitmap(bmp);if(r)onCode(r.getText())}catch(e){}}
+      setTimeout(tick,220)};tick();
+  }
+}
+function stopCam(){
+  scanning=false;stream?.getTracks().forEach(t=>t.stop());stream=null;
+  $("video").hidden=true;$("frame").hidden=true;$("idle").hidden=false;$("startBtn").hidden=false;$("stopBtn").hidden=true;
+}
+function onCode(code){
+  code=String(code).replace(/\D/g,"");
+  const now=Date.now();if(!code||(code===lastCode&&now-lastAt<4000))return;
+  lastCode=code;lastAt=now;
+  try{navigator.vibrate?.(80)}catch(e){}
+  stopCam();lookup(code);
+}
+async function scanPhoto(file){
+  showErr("");
+  const img=new Image();img.src=URL.createObjectURL(file);await img.decode();
+  const det=await nativeDetector();
+  if(det){try{const r=await det.detect(img);if(r[0])return lookup(r[0].rawValue.replace(/\D/g,""))}catch(e){}}
+  try{await loadZXing();const r=await new ZXing.BrowserMultiFormatReader().decodeFromImageElement(img);return lookup(r.getText())}
+  catch(e){showErr("Geen barcode gevonden op de foto. Probeer van dichterbij en scherp, of typ de code.")}
+}
+
+/* ---------- Opzoeken ---------- */
+const mineKey=()=>"mine:"+(current.code||current.data.query||"");
+const safeUrl=u=>/^https?:\/\//i.test(u||"")?u:"";
+async function getJSON(url){const r=await fetch(url);if(!r.ok)throw new Error(r.status);return r.json()}
+async function viaServer(code,q){
+  const p=new URLSearchParams();if(code)p.set("ean",code);if(q)p.set("q",q);
+  const r=await fetch("api/lookup?"+p);if(!r.ok)throw new Error("server "+r.status);return r.json();
+}
+const CJB_URLS=["https://cdn.jsdelivr.net/gh/supermarkt/checkjebon@main/data/supermarkets.json","https://raw.githubusercontent.com/supermarkt/checkjebon/main/data/supermarkets.json"];
+let cjb=null;
+async function loadCjb(){ // supermarktprijzen (Checkjebon), 12 uur bewaard op dit apparaat
+  if(cjb)return cjb;
+  let raw=null,err;
+  try{const c=await caches.open("cjb"),hit=await c.match("/cjb-data");if(hit&&Date.now()-store.get("cjbTs",0)<12*3600e3)raw=await hit.json()}catch(e){}
+  if(!raw)for(const u of CJB_URLS){
+    try{const r=await fetch(u);if(!r.ok)throw new Error("HTTP "+r.status);const copy=r.clone();raw=await r.json();
+      try{const c=await caches.open("cjb");await c.put("/cjb-data",copy);store.set("cjbTs",Date.now())}catch(e){}break}
+    catch(e){err=e}
+  }
+  if(!raw)throw err||new Error("geen data");
+  cjb=raw.filter(c=>c&&Array.isArray(c.d)).map(c=>({key:String(c.n),items:c.d.map(Match.prepareItem).filter(Boolean)}));
+  return cjb;
+}
+async function viaBrowser(code,qText){ // zonder server: alles in de browser
+  const [p,pr]=await Promise.allSettled([
+    code?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url`):null,
+    code?getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`):null
+  ]);
+  const o=p.status==="fulfilled"&&p.value&&p.value.status===1?p.value.product:null;
+  const product=o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||""}:null;
+  const prices=[],seen=new Set(),sources={standalone:true,openprices:!code?"niet gevraagd":pr.status==="fulfilled"?"ok":"niet bereikbaar"};
+  if(pr.status==="fulfilled"&&pr.value)for(const it of pr.value.items||[]){
+    if(it.price==null)continue;const L=it.location||{};const shop=L.osm_name||"Onbekende winkel",place=[L.osm_address_city,L.osm_address_country].filter(Boolean).join(", ");
+    if(seen.has(shop+place))continue;seen.add(shop+place);
+    prices.push({source:"Open Prices",shop,place,price:+it.price,cur:it.currency||"EUR",date:it.date,promo:!!it.price_is_discounted});
+  }
+  const q=Match.buildQuery({name:product?.name,brand:product?.brand,qty:product?.qty,q:qText});
+  try{
+    const chains=await loadCjb();
+    const m=q.tokens.size?Match.findMatches(chains,q):[];
+    for(const x of m){const c=Shops.chainInfo(x.chain);prices.push({source:"Checkjebon",shop:c.name,place:"online prijs",matchedName:x.name,size:x.size,price:x.price,cur:"EUR",unit:x.unit,confidence:x.confidence,url:c.product&&x.link&&c.key==="ah"?c.product(x.link):c.search?c.search(q.text):""})}
+    sources.checkjebon={status:"ok",producten:chains.reduce((n,c)=>n+c.items.length,0),gevonden:m.length,bijgewerkt:new Date(store.get("cjbTs",Date.now())).toISOString().slice(0,10)};
+  }catch(e){sources.checkjebon={status:"niet bereikbaar",fout:String(e.message||e)}}
+  const text=q.text||code;
+  return {ean:code,product,query:text,prices,links:Shops.links(text),sources};
+}
+async function lookup(code,q){
+  code=code||"";
+  if(!q&&!/^\d{6,14}$/.test(code)){showErr("Dat lijkt geen geldige barcode.");return}
+  showErr("");$("eanInput").value=code;$("result").hidden=false;
+  $("prod").innerHTML=`<div class="ph"></div><div><h3>Bezig met zoeken…</h3><div class="mut">${esc(q||"EAN "+code)}</div></div>`;
+  $("best").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";
+  $("result").scrollIntoView({behavior:"smooth",block:"start"});
+  let d;
+  try{
+    if(window.STANDALONE)throw new Error("zonder server");
+    d=await viaServer(code,q);
+  }catch(e){
+    if(typeof Match==="undefined"){showErr("Opzoeken mislukt: de server is niet bereikbaar.");return}
+    d=await viaBrowser(code,q);
+  }
+  current={code,data:d};
+  if(code)addHistory({code,name:d.product?.name||code});
+  render();
+}
+
+function collectPrices(){
+  const out=[...(current.data.prices||[])];
+  for(const m of store.get(mineKey(),[]))out.push({...m,cur:"EUR",source:"Jij",mine:true});
+  return out.filter(x=>x.cur==="EUR").sort((a,b)=>a.price-b.price).concat(out.filter(x=>x.cur!=="EUR"));
+}
+const chipHTML=a=>(a||[]).map(l=>`<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.name)} ↗</a>`).join("");
+function sourceNote(s){
+    const t=[],c=s.checkjebon;
+  if(c)t.push(c.producten?`Supermarktprijzen uit Checkjebon (${c.gevonden} winkels gekoppeld, bijgewerkt ${c.bijgewerkt}${c.status==="verouderd"?", verouderd":""})`:`Supermarktprijzen niet beschikbaar (${c.status}${c.fout?": "+c.fout:""})`);
+  if(s.openprices&&s.openprices!=="niet gevraagd")t.push(s.openprices==="ok"?"Open Prices (gebruikersprijzen)":"Open Prices niet bereikbaar");
+  return t.join(" · ")+". Supermarktprijzen zijn online prijzen; check de actie-links voor weekaanbiedingen.";
+}
+function render(){
+  const d=current.data,p=d.product||{},title=p.name||(d.query&&!current.code?d.query:"Onbekend product");
+  $("prod").innerHTML=`${p.img?`<img src="${esc(safeUrl(p.img))}" alt="">`:`<div class="ph"></div>`}<div><h3>${esc(title)}</h3><div class="mut">${esc([p.brand,p.qty].filter(Boolean).join(" · ")||(p.name?"":"Typ hieronder de naam om toch te vergelijken"))}</div>${current.code?`<div class="mut">EAN ${esc(current.code)}</div>`:""}</div>`;
+  $("nameInput").value=d.query&&d.query!==current.code?d.query:"";
+  const list=collectPrices(),eurs=list.filter(x=>x.cur==="EUR"),best=eurs[0];
+  $("best").innerHTML=best?`<div class="label"><div><div class="mut" style="color:#333">Goedkoopst gevonden</div><div class="where">${esc(best.shop)}${best.place?", "+esc(best.place):""}</div></div><div class="big">${eur(best.price)}</div>${eurs.length>1?`<div style="grid-column:1/-1;font-size:14px">Tot ${eur(eurs[eurs.length-1].price-best.price)} goedkoper dan de duurste van ${eurs.length} aanbieders</div>`:""}</div>`:"";
+  $("prices").innerHTML=list.length?list.map(x=>{
+    const dd=best&&x.cur==="EUR"?x.price-best.price:null,u=safeUrl(x.url);
+    const name=u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.shop)}</a>`:esc(x.shop);
+    const sub=[x.matchedName?`Gevonden als: ${x.matchedName}${x.size?" ("+x.size+")":""}`:x.place,x.unit?`${eur(x.unit.v)} per ${x.unit.label}`:"",x.date&&new Date(x.date).toLocaleDateString("nl-NL",{day:"numeric",month:"short",year:"numeric"})].filter(Boolean).join(" · ");
+    return `<li><div><strong>${name}</strong><span class="src">${esc(x.source)}</span>${x.promo?'<span class="src">aanbieding</span>':""}${x.confidence==="middel"?'<span class="src warn">controleer variant</span>':""}<div class="sub">${esc(sub)}${x.mine?` <button class="del" data-del="${esc(x.id)}">verwijderen</button>`:""}</div></div><div><div class="p">${money(x.price,x.cur)}</div>${dd!=null?`<div class="diff ${dd===0?"best":""}">${dd===0?"laagste":"+"+eur(dd)}</div>`:""}</div></li>`}).join("")
+    :`<li><div class="mut">Nog geen prijzen gevonden. Probeer hierboven de productnaam te typen, zoek via de links hieronder, of voeg zelf een prijs toe.</div></li>`;
+  $("pricesNote").textContent=sourceNote(d.sources||{});
+  const L=d.links,q=encodeURIComponent(d.query||current.code);
+  $("promos").innerHTML=L?chipHTML(L.promos):"";
+  $("chips").innerHTML=L?chipHTML(L.shops):SHOPS.map(s=>`<a href="${s[1]}${q}" target="_blank" rel="noopener">${esc(s[0])} ↗</a>`).join("");
+  $("webshops").innerHTML=L?chipHTML(L.webshops):"";
+}
+
+/* ---------- Eigen prijzen & geschiedenis ---------- */
+$("addForm").addEventListener("submit",e=>{
+  e.preventDefault();if(!current)return;
+  const v=parseFloat($("price").value.replace(/[€\s]/g,"").replace(",","."));
+  if(!(v>0)){$("price").focus();return}
+  const k=mineKey(),arr=store.get(k,[]),shop=$("shop").value;
+  const i=arr.findIndex(x=>x.shop===shop);const row={id:Date.now().toString(36),shop,price:v,date:new Date().toISOString().slice(0,10)};
+  if(i>=0)arr[i]=row;else arr.push(row);
+  store.set(k,arr);store.set("lastShop",shop);$("price").value="";render();
+});
+$("prices").addEventListener("click",e=>{
+  const id=e.target.dataset?.del;if(!id)return;
+  const k=mineKey();store.set(k,store.get(k,[]).filter(x=>x.id!==id));render();
+});
+function addHistory(c){
+  const h=store.get("hist",[]).filter(x=>x.code!==c.code);h.unshift({code:c.code,name:c.name||c.code});store.set("hist",h.slice(0,12));drawHistory();
+}
+function drawHistory(){
+  const h=store.get("hist",[]);$("histWrap").hidden=!h.length;
+  $("hist").innerHTML=h.map(x=>`<button data-code="${esc(x.code)}">${esc(x.name.length>28?x.name.slice(0,27)+"…":x.name)}</button>`).join("");
+}
+$("hist").addEventListener("click",e=>{const c=e.target.closest("button")?.dataset.code;if(c)lookup(c)});
+
+$("startBtn").addEventListener("click",startCam);
+$("stopBtn").addEventListener("click",stopCam);
+$("photo").addEventListener("change",e=>{const f=e.target.files[0];if(f)scanPhoto(f);e.target.value=""});
+$("eanForm").addEventListener("submit",e=>{e.preventDefault();lookup($("eanInput").value.trim())});
+$("nameForm").addEventListener("submit",e=>{e.preventDefault();const q=$("nameInput").value.trim();if(q)lookup("",q)});
+drawHistory();
+if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
