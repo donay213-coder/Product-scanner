@@ -65,6 +65,13 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .ns i.on{opacity:1;width:32px;height:36px;font-size:20px;border-radius:8px;box-shadow:0 0 0 2px var(--card),0 0 0 3.5px var(--ink)}
 .chip{font-size:13px;border:1.5px solid var(--line);border-radius:99px;padding:3px 10px;white-space:nowrap}
 .chip b{font-weight:800}
+.pref{margin-top:10px;padding:9px 12px;border-radius:10px;font-size:15px;font-weight:600}
+.pref.ok{background:rgba(3,129,65,.14)}.pref.bad{background:rgba(230,62,17,.14)}.pref.unk{background:rgba(120,120,120,.16)}
+.pl{display:flex;align-items:center;gap:8px;min-height:44px}.pl input{width:22px;min-height:22px}
+.alt{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.alt:last-of-type{border:0}.alt img,.alt .ph{width:48px;height:48px;object-fit:contain}
+.altr{display:grid;gap:2px;justify-items:end;text-align:right}
+.gb{display:inline-grid;place-items:center;width:32px;height:36px;border-radius:8px;font-weight:800;font-size:20px}
 .g-a{background:#038141;color:#fff}.g-b{background:#85bb2f;color:#111}.g-c{background:#fecb02;color:#111}.g-d{background:#ee8100;color:#111}.g-e{background:#e63e11;color:#fff}
 .tabs{display:flex;gap:8px;margin:0 0 14px}.tabs button{flex:1;justify-content:center}
 .tabs button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
@@ -129,7 +136,12 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
   <div class="card">
     <div class="prod" id="prod"></div>
     <div class="grades" id="grades"></div>
+    <div id="prefBadge"></div>
     <div id="best"></div>
+    <div id="altWrap" hidden>
+      <button id="altBtn" type="button" style="margin-top:10px">Gezondere keuzes in dezelfde categorie</button>
+      <div id="altOut" aria-live="polite"></div>
+    </div>
   </div>
   <form class="ean" id="nameForm">
     <input id="nameInput" placeholder="Product onbekend of fout? Typ de naam, bv. Calvé pindakaas 650 g" aria-label="Productnaam">
@@ -157,6 +169,17 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 
   <h2>Webshops en prijsvergelijkers</h2>
   <div class="chips" id="webshops"></div>
+</section>
+
+<section id="prefsWrap" hidden>
+  <details class="card" id="prefsBox">
+    <summary>Mijn voorkeuren <span class="mut" id="prefsSummary"></span></summary>
+    <label class="pl"><input type="checkbox" id="prefVeg"> Vegetarisch</label>
+    <label class="pl"><input type="checkbox" id="prefVegan"> Vegan</label>
+    <p class="mut" style="margin:8px 0 0">Allergenen</p>
+    <div id="prefAlg"></div>
+    <p class="mut" id="prefsNote">Gegevens van Open Food Facts (ODbL), ingevuld door vrijwilligers en vaak onvolledig. De app zegt alleen "past" als de gegevens dat duidelijk laten zien; ontbreken ze, dan staat er een vraagteken. Dit is geen medisch advies: controleer altijd de verpakking.</p>
+  </details>
 </section>
 
 <section id="histWrap" hidden>
@@ -465,6 +488,130 @@ const API = { CHAINS, chainInfo, links };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Shops = API;
 
 })();</script>
+<script>(function(){
+'use strict';
+// Voorkeuren (vegetarisch, vegan, allergenen) en gezondere alternatieven op basis van Open Food Facts-gegevens.
+// Uitgangspunt: gegevens van vrijwilligers zijn vaak onvolledig. Alleen een expliciete melding telt als "ja";
+// ontbrekende gegevens zijn "onbekend" en nooit "geen". Dit is geen medisch of allergie-advies.
+
+const ALLERGENS = [
+  { key: 'en:gluten', nl: 'Gluten' }, { key: 'en:milk', nl: 'Melk' }, { key: 'en:eggs', nl: 'Eieren' },
+  { key: 'en:peanuts', nl: "Pinda's" }, { key: 'en:nuts', nl: 'Noten' }, { key: 'en:soybeans', nl: 'Soja' },
+  { key: 'en:fish', nl: 'Vis' }, { key: 'en:crustaceans', nl: 'Schaaldieren' }, { key: 'en:molluscs', nl: 'Weekdieren' },
+  { key: 'en:celery', nl: 'Selderij' }, { key: 'en:mustard', nl: 'Mosterd' }, { key: 'en:sesame-seeds', nl: 'Sesamzaad' },
+  { key: 'en:lupin', nl: 'Lupine' }, { key: 'en:sulphur-dioxide-and-sulphites', nl: 'Sulfiet' },
+];
+const GRADES = 'abcde';
+const GENERIC = new Set(['en:foods', 'en:food-and-beverages', 'en:plant-based-foods-and-beverages', 'en:plant-based-foods', 'en:beverages', 'en:snacks', 'en:groceries']);
+const FIELDS = 'code,product_name,product_name_nl,brands,quantity,nutriscore_grade,image_front_small_url,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags';
+
+const lc = (a) => (Array.isArray(a) ? a : []).map((t) => String(t).toLowerCase());
+const rank = (g) => (/^[a-e]$/.test(g) ? GRADES.indexOf(g) : 9); // onbekende score sorteert achteraan
+const allergenName = (key) => (ALLERGENS.find((a) => a.key === key) || { nl: String(key).replace(/^en:/, '') }).nl;
+
+function dietStatus(p, diet) {
+  const t = lc(p && p.diet);
+  if (diet === 'vegan') {
+    if (t.includes('en:vegan')) return 'ja';
+    if (t.includes('en:non-vegan')) return 'nee';
+    if (t.includes('en:maybe-vegan')) return 'misschien';
+    return 'onbekend';
+  }
+  if (t.includes('en:vegetarian') || t.includes('en:vegan')) return 'ja';
+  if (t.includes('en:non-vegetarian')) return 'nee';
+  if (t.includes('en:maybe-vegetarian')) return 'misschien';
+  return 'onbekend';
+}
+
+function allergenStatus(p, key) {
+  if (lc(p && p.alg).includes(key)) return 'bevat';
+  if (lc(p && p.traces).includes(key)) return 'sporen';
+  return p && p.ingDone ? 'geen' : 'onbekend';
+}
+
+function checkPrefs(p, prefs) {
+  const none = { verdict: null, issues: [] };
+  if (!prefs) return none;
+  const vegan = !!prefs.vegan, veg = !!prefs.vegetarian && !vegan, algs = prefs.allergens || [];
+  if (!vegan && !veg && !algs.length) return none;
+  const issues = [];
+  const diet = (want, label) => {
+    const s = dietStatus(p, want);
+    if (s === 'nee') issues.push({ kind: 'nee', text: `niet ${label}` });
+    else if (s !== 'ja') issues.push({ kind: 'onbekend', text: `niet zeker of het ${label} is` });
+  };
+  if (vegan) diet('vegan', 'vegan');
+  if (veg) diet('vegetarian', 'vegetarisch');
+  const unknown = [];
+  for (const key of algs) {
+    const s = allergenStatus(p, key), name = allergenName(key).toLowerCase();
+    if (s === 'bevat') issues.push({ kind: 'nee', text: `bevat ${name}` });
+    else if (s === 'sporen') issues.push({ kind: 'nee', text: `kan sporen van ${name} bevatten` });
+    else if (s === 'onbekend') unknown.push(name);
+  }
+  if (unknown.length) issues.push({ kind: 'onbekend', text: `ingrediënten onvolledig, allergenen onzeker: ${unknown.join(', ')}` });
+  const verdict = issues.some((i) => i.kind === 'nee') ? 'nee' : issues.length ? 'onbekend' : 'ja';
+  return { verdict, issues };
+}
+
+// Meest specifieke categorie eerst (Open Food Facts zet de specifieke achteraan); algemene en niet-Engelse tags overslaan.
+function catCandidates(tags, max = 2) {
+  const out = [];
+  for (const t of lc(tags).reverse()) {
+    if (!t.startsWith('en:') || GENERIC.has(t) || out.includes(t)) continue;
+    out.push(t);
+  }
+  return out.slice(0, max);
+}
+
+function betterGrades(grade) {
+  const i = rank(String(grade || '').toLowerCase());
+  return i === 9 ? ['a', 'b'] : GRADES.split('').slice(0, i);
+}
+
+function searchUrl(tag, grades) {
+  let u = `https://world.openfoodfacts.org/api/v2/search?categories_tags=${encodeURIComponent(tag)}&countries_tags_en=netherlands&sort_by=popularity_key&page_size=60&fields=${FIELDS}`;
+  if (grades && grades.length) u += `&nutrition_grades_tags=${encodeURIComponent(grades.join('|'))}`;
+  return u;
+}
+
+function normProduct(o) {
+  if (!o) return null;
+  const g = String(o.nutriscore_grade || '').toLowerCase();
+  return {
+    code: String(o.code || ''), name: o.product_name_nl || o.product_name || '', brand: String(o.brands || '').split(',')[0].trim(),
+    qty: o.quantity || '', grade: /^[a-e]$/.test(g) ? g : '', img: o.image_front_small_url || '',
+    diet: lc(o.ingredients_analysis_tags), alg: lc(o.allergens_tags), traces: lc(o.traces_tags),
+    ingDone: lc(o.states_tags).includes('en:ingredients-completed'), cats: lc(o.categories_tags),
+  };
+}
+
+// results: genormaliseerde producten uit de zoekopdracht; current: {code, grade}.
+function pickAlternatives(results, current, prefs, { max = 8 } = {}) {
+  const allowed = betterGrades(current && current.grade), seen = new Set();
+  const items = [];
+  let skippedUnknown = 0, skippedNo = 0;
+  for (const p of results || []) {
+    if (!p || !p.code || !p.name || p.code === (current && current.code) || seen.has(p.code) || !allowed.includes(p.grade)) continue;
+    seen.add(p.code);
+    const c = checkPrefs(p, prefs);
+    if (c.verdict === 'nee') { skippedNo++; continue; }
+    if (c.verdict === 'onbekend') { skippedUnknown++; continue; }
+    items.push({ ...p, verdict: c.verdict, issues: c.issues });
+  }
+  items.sort((a, b) => rank(a.grade) - rank(b.grade)); // stabiel: bij gelijke score blijft de populariteitsvolgorde
+  return { items: items.slice(0, max), skippedUnknown, skippedNo };
+}
+
+function sortAlternatives(items) {
+  return (items || []).map((x, i) => [x, i]).sort(([a, i], [b, j]) =>
+    rank(a.grade) - rank(b.grade) || (a.price == null) - (b.price == null) || (a.price ?? 0) - (b.price ?? 0) || i - j).map(([x]) => x);
+}
+
+const API = { ALLERGENS, allergenName, dietStatus, allergenStatus, checkPrefs, catCandidates, betterGrades, searchUrl, normProduct, pickAlternatives, sortAlternatives };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Health = API;
+
+})();</script>
 <script>
 {
 const SHOPS=[
@@ -599,13 +746,13 @@ function loadCjb(strict){
   if(!cjbP)cjbP=fetchCjb().finally(()=>{cjbP=null});
   return cjbP.catch(e=>{if(cjb&&!strict)return cjb;throw e});
 }
-async function viaBrowser(code,qText,strict){ // zonder server: alles in de browser
+async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} = productgegevens die we al hebben, dan geen Open Food Facts-opvraging // zonder server: alles in de browser
   const [p,pr]=await Promise.allSettled([
-    code?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade`):null,
+    code&&!known?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade,categories_tags,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags`):null,
     code?getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`):null
   ]);
   const o=p.status==="fulfilled"&&p.value&&p.value.status===1?p.value.product:null;
-  const product=o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||""}:null;
+  const product=known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed")}:null;
   const prices=[],seen=new Set(),sources={standalone:true,openprices:!code?"niet gevraagd":pr.status==="fulfilled"?"ok":"niet bereikbaar"};
   if(pr.status==="fulfilled"&&pr.value)for(const it of pr.value.items||[]){
     if(it.price==null)continue;const L=it.location||{};const shop=L.osm_name||"Onbekende winkel",place=[L.osm_address_city,L.osm_address_country].filter(Boolean).join(", ");
@@ -622,13 +769,13 @@ async function viaBrowser(code,qText,strict){ // zonder server: alles in de brow
   const text=q.text||code;
   return {ean:code,product,query:text,prices,links:Shops.links(text),sources};
 }
-async function fetchData(code,q,strict){ // opzoeken zonder iets te tekenen (ook voor verversen)
+async function fetchData(code,q,strict,known){ // opzoeken zonder iets te tekenen (ook voor verversen)
   try{
     if(window.STANDALONE)throw new Error("zonder server");
     return await viaServer(code,q);
   }catch(e){
     if(typeof Match==="undefined")throw new Error("server niet bereikbaar");
-    return viaBrowser(code,q,strict);
+    return viaBrowser(code,q,strict,known);
   }
 }
 async function lookup(code,q){
@@ -689,6 +836,7 @@ function render(){
   $("promos").innerHTML=L?chipHTML(L.promos):"";
   $("chips").innerHTML=L?chipHTML(L.shops):SHOPS.map(s=>`<a href="${s[1]}${q}" target="_blank" rel="noopener">${esc(s[0])} ↗</a>`).join("");
   $("webshops").innerHTML=L?chipHTML(L.webshops):"";
+  renderPrefBadge();renderAlt();
 }
 
 /* ---------- Eigen prijzen & geschiedenis ---------- */
@@ -717,6 +865,94 @@ function drawHistory(){
 }
 $("hist").addEventListener("click",e=>{const c=e.target.closest("button")?.dataset.code;if(c)lookup(c)});
 
+/* ---------- Voorkeuren en gezondere alternatieven ---------- */
+const HEALTH=typeof Health!=="undefined"&&typeof Match!=="undefined";
+let prefs=(p=>({vegetarian:!!p.vegetarian,vegan:!!p.vegan,allergens:Array.isArray(p.allergens)?p.allergens:[]}))(store.get("prefs",{}));
+const prefsOn=()=>HEALTH&&(prefs.vegan||prefs.vegetarian||prefs.allergens.length>0);
+function renderPrefsSummary(){
+  const n=[prefs.vegan?"vegan":prefs.vegetarian?"vegetarisch":"",...prefs.allergens.map(k=>Health.allergenName(k).toLowerCase())].filter(Boolean);
+  $("prefsSummary").textContent=n.length?`(${n.join(", ")})`:"";
+}
+function savePrefs(){store.set("prefs",prefs);renderPrefsSummary();renderPrefBadge();$("altOut").innerHTML=""}
+function initPrefs(){
+  $("prefsWrap").hidden=!HEALTH;if(!HEALTH)return;
+  $("prefVeg").checked=prefs.vegetarian;$("prefVegan").checked=prefs.vegan;
+  $("prefAlg").innerHTML=Health.ALLERGENS.map(a=>`<label class="pl"><input type="checkbox" data-alg="${a.key}"${prefs.allergens.includes(a.key)?" checked":""}> ${esc(a.nl)}</label>`).join("");
+  renderPrefsSummary();
+}
+$("prefVeg").addEventListener("change",()=>{prefs.vegetarian=$("prefVeg").checked;savePrefs()});
+$("prefVegan").addEventListener("change",()=>{prefs.vegan=$("prefVegan").checked;savePrefs()});
+$("prefAlg").addEventListener("change",e=>{
+  const k=e.target.dataset&&e.target.dataset.alg;if(!k)return;
+  const set=new Set(prefs.allergens);if(e.target.checked)set.add(k);else set.delete(k);
+  prefs.allergens=[...set];savePrefs();
+});
+function renderPrefBadge(){
+  const el=$("prefBadge");el.innerHTML="";
+  if(!prefsOn()||!current||!current.data.product||!current.data.product.name)return;
+  const r=Health.checkPrefs(current.data.product,prefs);if(!r.verdict)return;
+  const bad=r.issues.filter(i=>i.kind==="nee").map(i=>i.text),unk=r.issues.filter(i=>i.kind==="onbekend").map(i=>i.text);
+  el.innerHTML=(r.verdict==="ja"?`<div class="pref ok">✓ Past bij je voorkeuren, volgens Open Food Facts.</div>`
+    :r.verdict==="nee"?`<div class="pref bad">⚠ Past niet bij je voorkeuren: ${esc([...bad,...unk].join("; "))}.</div>`
+    :`<div class="pref unk">? Niet zeker of het past: ${esc(unk.join("; "))}.</div>`)+`<div class="mut" style="margin-top:4px">Controleer altijd de verpakking.</div>`;
+}
+const gradeBadge=g=>`<span class="gb g-${g}" role="img" aria-label="Nutri-Score ${g.toUpperCase()}">${g.toUpperCase()}</span>`;
+const altCache=new Map();let altBusy=false,altFor=null;
+function renderAlt(){
+  if(altFor!==current){$("altOut").innerHTML="";altFor=current}
+  const p=current&&current.data.product;
+  $("altWrap").hidden=!(HEALTH&&p&&p.name&&Health.catCandidates(p.cats).length&&grade(p.nutri)!=="a");
+}
+async function searchOff(url){
+  if(altCache.has(url))return altCache.get(url);
+  const r=await fetch(url);
+  if(r.status===429){const e=new Error("limiet");e.rate=true;throw e}
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  const j=await r.json(),out=(j.products||[]).map(Health.normProduct).filter(Boolean);
+  altCache.set(url,out);return out; // mislukte zoekopdrachten worden niet bewaard
+}
+async function findAlternatives(){
+  if(altBusy||!current)return;
+  const mine=current,p=mine.data.product,cur={code:mine.code,grade:grade(p.nutri)};
+  const cats=Health.catCandidates(p.cats),better=Health.betterGrades(cur.grade),out=$("altOut");
+  altBusy=true;$("altBtn").disabled=true;out.innerHTML=`<p class="mut">Zoeken…</p>`;
+  try{
+    let best=null,cat="",err=null;
+    try{
+      for(const tag of cats){
+        let prods=await searchOff(Health.searchUrl(tag,better));
+        if(!prods.length)prods=await searchOff(Health.searchUrl(tag,null)); // scorefilter werkt niet of levert niets: zonder filter, wij filteren zelf
+        const pick=Health.pickAlternatives(prods,cur,prefs);
+        if(!best||pick.items.length>best.items.length){best=pick;cat=tag}
+        if(pick.items.length>=3)break;
+      }
+    }catch(e){err=e}
+    if(current!==mine)return; // intussen een ander product gescand
+    if(!best||(err&&!best.items.length)){
+      out.innerHTML=`<p class="mut">${err&&err.rate?"Open Food Facts staat 10 zoekopdrachten per minuut toe. Probeer het over een minuut opnieuw.":"Zoeken lukt nu niet. Probeer het later opnieuw."}</p>`;return;
+    }
+    const skip=best.skippedUnknown?` ${best.skippedUnknown} ${best.skippedUnknown===1?"product":"producten"} overgeslagen omdat gegevens ontbreken.`:"";
+    if(!best.items.length){
+      out.innerHTML=`<p class="mut">${best.skippedUnknown?`Geen zekere alternatieven gevonden.${skip}`:"Geen betere alternatieven gevonden in deze categorie."} Controleer altijd de verpakking.</p>`;return;
+    }
+    let chains=null;try{chains=await loadCjb()}catch(e){}
+    if(current!==mine)return;
+    const items=best.items.map(x=>({...x}));
+    if(chains)for(const it of items){
+      const q=Match.buildQuery({name:it.name,brand:it.brand,qty:it.qty});
+      const m=q.tokens.size?Match.findMatches(chains,q).filter(x=>x.confidence==="hoog"):[];
+      if(m.length){const b=m.reduce((a,c)=>c.price<a.price?c:a);it.price=b.price;it.shop=Shops.chainInfo(b.chain).name}
+    }
+    const shown=Health.sortAlternatives(items).slice(0,5),fit=prefsOn();
+    out.innerHTML=`<p class="mut" style="margin:12px 0 0">${cur.grade?`Betere Nutri-Score dan ${cur.grade.toUpperCase()}`:"Producten met Nutri-Score A of B"}, gezondst eerst:</p>`
+      +shown.map(it=>`<div class="alt">${it.img?`<img src="${esc(safeUrl(it.img))}" alt="" loading="lazy">`:`<div class="ph"></div>`}<div><strong>${esc(it.name)}</strong><div class="sub">${esc([it.brand,it.qty].filter(Boolean).join(" · "))}</div>${fit?`<div class="sub">✓ past bij je voorkeuren</div>`:""}</div><div class="altr">${gradeBadge(it.grade)}<div class="p">${it.price!=null?eur(it.price):"prijs onbekend"}</div>${it.price!=null?`<div class="sub">${esc(it.shop)}, online</div>`:""}<button data-alt="${esc(it.code)}">Bekijk</button></div></div>`).join("")
+      +`<p class="mut">Zelfde soort: ${esc(cat.replace(/^en:/,"").replace(/-/g," "))}. Controleer altijd de verpakking: Open Food Facts wordt door vrijwilligers ingevuld.${skip}</p>`;
+  }finally{altBusy=false;$("altBtn").disabled=false}
+}
+$("altBtn").addEventListener("click",findAlternatives);
+$("altOut").addEventListener("click",e=>{const c=e.target.dataset&&e.target.dataset.alt;if(c)lookup(c)});
+initPrefs();
+
 /* ---------- Boodschappenlijstjes per winkel ---------- */
 let lists=store.get("lists",{}),listShop=store.get("listShop","");
 const saveLists=()=>store.set("lists",lists);
@@ -732,9 +968,9 @@ function addToList(row){
   const arr=lists[shop]=lists[shop]||[];
   const ex=arr.find(x=>(current.code&&x.ean===current.code)||(!x.ean&&x.name.toLowerCase()===name.toLowerCase()));
   const pm={};for(const x of eurs){if(pm[x.shop]==null||x.price<pm[x.shop])pm[x.shop]=x.price}
-  const q=!current.code&&d.query?d.query:"";
-  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm;ex.upd=Date.now();ex.gone=false;delete ex.chg;if(q&&!ex.q)ex.q=q}
-  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm,upd:Date.now(),...(q?{q}:{})});
+  const q=!current.code&&d.query?d.query:"",mq=current.code&&p.name?{name:p.name,brand:p.brand||"",qty:p.qty||""}:null;
+  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm;ex.upd=Date.now();ex.gone=false;delete ex.chg;if(q&&!ex.q)ex.q=q;if(mq)ex.mq=mq}
+  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm,upd:Date.now(),...(q?{q}:{}),...(mq?{mq}:{})});
   listShop=shop;store.set("listShop",listShop);saveLists();renderLists();
   toast(`Op het lijstje van ${shop}`);
 }
@@ -799,21 +1035,22 @@ async function refreshPrices(manual){
   for(const [shop,arr] of Object.entries(lists))for(const it of arr){
     if(it.done||!Match.refreshable(it))continue;
     const k=it.ean||"q:"+it.q;
-    if(!jobs.has(k))jobs.set(k,{ean:it.ean,q:it.q,refs:[]});
-    jobs.get(k).refs.push([shop,it]);
+    if(!jobs.has(k))jobs.set(k,{ean:it.ean,q:it.q,mq:null,refs:[]});
+    const jb=jobs.get(k);jb.refs.push([shop,it]);if(!jb.mq&&it.mq)jb.mq=it.mq;
   }
   const todo=[...jobs.values()];if(!todo.length)return;
   refreshing=true;let changed=0,failed=0,done=0;refreshUI(true,0,todo.length);
   const now=Date.now();
   const run=async job=>{
     try{
-      const d=await fetchData(job.ean,job.ean?(names[job.ean]||""):job.q,true);
+      const d=await fetchData(job.ean,job.ean?(names[job.ean]||""):job.q,true,job.mq);
       if(!Match.freshOk(d.sources))throw new Error("bron niet volledig");
       if(job.ean&&!(d.product&&d.product.name)&&!names[job.ean])throw new Error("productgegevens ontbreken");
       const mine=store.get("mine:"+(job.ean||job.q),[]).map(m=>({...m,cur:"EUR"}));
       const pm=Match.minByShop([...(d.prices||[]),...mine]);
       if(!Object.keys(pm).length)throw new Error("geen prijzen gevonden");
-      for(const [shop,it] of job.refs){const n=Match.applyFresh(it,pm,shop,now);if(it.price!=null&&n.price!==it.price)changed++;Object.assign(it,n)}
+      const mqNew=job.ean&&d.product&&d.product.name?{name:d.product.name,brand:d.product.brand||"",qty:d.product.qty||""}:null;
+      for(const [shop,it] of job.refs){const n=Match.applyFresh(it,pm,shop,now);if(it.price!=null&&n.price!==it.price)changed++;Object.assign(it,n);if(!it.mq&&mqNew)it.mq=mqNew}
     }catch(e){failed++}
     refreshUI(true,++done,todo.length);
   };
