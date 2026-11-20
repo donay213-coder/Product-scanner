@@ -78,6 +78,10 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:9;max-width:90vw;text-align:center}
 .addform{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;gap:8px;margin-bottom:12px}
 @media(max-width:480px){.addform{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.addform button{grid-column:1/-1}}
+.br{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.br:last-child{border:0}.br.best strong{background:var(--tag);color:#111;padding:0 6px}
+.sav{background:var(--bg-ok,rgba(10,122,61,.12));border-radius:10px;padding:10px 12px;margin-top:10px;font-size:15px}
+details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
 .del{border:0;background:none;color:var(--mut);min-height:32px;padding:0 4px;font-size:13px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chips a{font-size:14px;min-height:40px;padding:0 12px;border-radius:99px;border:1.5px solid var(--line);display:inline-flex;align-items:center;color:var(--ink);text-decoration:none;background:var(--card)}
@@ -174,6 +178,11 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
     <button class="pri" type="submit">Toevoegen</button>
   </form>
   <div class="card"><div id="listItems"></div><div class="tot" id="listTotal"></div><p class="mut" id="listNote"></p></div>
+  <div class="card" id="basketCard" hidden style="margin-top:12px">
+    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Waar is je lijstje het goedkoopst?</p>
+    <label class="mut" style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="basketAll" style="width:22px;min-height:22px"> Alle lijstjes samen vergelijken</label>
+    <div id="basket"></div>
+  </div>
   <div class="row">
     <button id="listShare">Deel lijstje</button>
     <button id="listClearDone">Gekochte weghalen</button>
@@ -304,7 +313,38 @@ function findMatches(chains, q, { min = 0.6, high = 0.85 } = {}) {
   return out.sort((a, b) => a.price - b.price);
 }
 
-const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare };
+
+// Mandje vergelijken. items: [{name, qty, pm:{winkel: prijs}}]; pm = prijzen per winkel op het moment van toevoegen.
+const r2 = (n) => Math.round(n * 100) / 100;
+function compareBasket(items) {
+  const priced = (items || []).filter((it) => it && it.pm && Object.keys(it.pm).length);
+  const shops = new Set();
+  priced.forEach((it) => Object.keys(it.pm).forEach((s) => shops.add(s)));
+  const rows = [...shops].map((shop) => {
+    let total = 0, have = 0;
+    const missing = [];
+    for (const it of priced) {
+      const p = it.pm[shop];
+      if (p == null) missing.push(it.name); else { have++; total += p * (it.qty || 1); }
+    }
+    return { shop, total: r2(total), have, missing, complete: have === priced.length };
+  }).sort((a, b) => b.have - a.have || a.total - b.total);
+  let mixTotal = 0;
+  const picks = [], used = new Set();
+  for (const it of priced) {
+    const [shop, price] = Object.entries(it.pm).sort((a, b) => a[1] - b[1])[0];
+    mixTotal += price * (it.qty || 1); used.add(shop);
+    picks.push({ name: it.name, qty: it.qty || 1, shop, price });
+  }
+  const bestComplete = rows.find((r) => r.complete) || null;
+  return {
+    priced: priced.length, skipped: (items || []).length - priced.length, rows,
+    mix: { total: r2(mixTotal), shops: [...used], picks },
+    saving: bestComplete ? r2(Math.max(0, bestComplete.total - mixTotal)) : 0,
+  };
+}
+
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
 
 })();</script>
@@ -627,13 +667,35 @@ function addToList(row){
   const alt=price!=null&&best&&best.shop!==shop&&best.price<price-0.005?{shop:best.shop,price:best.price}:null;
   const arr=lists[shop]=lists[shop]||[];
   const ex=arr.find(x=>(current.code&&x.ean===current.code)||(!x.ean&&x.name.toLowerCase()===name.toLowerCase()));
-  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt}
-  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt});
+  const pm={};for(const x of eurs){if(pm[x.shop]==null||x.price<pm[x.shop])pm[x.shop]=x.price}
+  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm}
+  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm});
   listShop=shop;store.set("listShop",listShop);saveLists();renderLists();
   toast(`Op het lijstje van ${shop}`);
 }
 const countAll=()=>Object.values(lists).reduce((n,a)=>n+a.filter(x=>!x.done).length,0);
 const lineSum=a=>a.reduce((t,x)=>x.price!=null&&!x.done?t+x.price*x.qty:t,0);
+function basketItems(all){
+  const src=all?Object.values(lists).flat():(lists[listShop]||[]),map=new Map();
+  for(const x of src){
+    if(x.done)continue;const k=x.ean||x.name.toLowerCase(),ex=map.get(k);
+    if(!ex)map.set(k,{name:x.name,qty:x.qty,pm:x.pm?{...x.pm}:null});
+    else{ex.qty=Math.max(ex.qty,x.qty);if(x.pm){ex.pm=ex.pm||{};for(const [sh,pr] of Object.entries(x.pm))if(ex.pm[sh]==null||pr<ex.pm[sh])ex.pm[sh]=pr}}
+  }
+  return [...map.values()];
+}
+function renderBasket(){
+  if(typeof Match==="undefined"){$("basketCard").hidden=true;return}
+  const r=Match.compareBasket(basketItems($("basketAll").checked));
+  if(!r.priced){$("basketCard").hidden=true;return}
+  $("basketCard").hidden=false;
+  const first=r.rows.find(x=>x.complete),n=r.priced;
+  let h=first?`<p style="margin:6px 0">Goedkoopst bij <strong>${esc(first.shop)}</strong>: ${eur(first.total)}</p>`:`<p style="margin:6px 0">Geen enkele winkel heeft alle ${n} producten. De meeste (${r.rows[0].have} van ${n}) heeft <strong>${esc(r.rows[0].shop)}</strong>.</p>`;
+  h+=r.rows.slice(0,6).map(x=>`<div class="br${first&&x===first?" best":""}"><div><strong>${esc(x.shop)}</strong><div class="sub">${x.complete?(n===1?"1 product":`alle ${n} producten`):`${x.have} van ${n} producten${x.missing.length?`, mist: ${esc(x.missing.slice(0,3).join(", "))}${x.missing.length>3?"…":""}`:""}`}</div></div><div class="p">${eur(x.total)}${first&&x.complete&&x!==first?`<div class="diff">+ ${eur(x.total-first.total)}</div>`:""}</div></div>`).join("");
+  if(r.mix.shops.length>1)h+=`<div class="sav">Elk product bij de goedkoopste winkel: <strong>${eur(r.mix.total)}</strong> (${r.mix.shops.length} winkels)${r.saving>=0.01?`, dat scheelt ${eur(r.saving)} met de beste enkele winkel`:""}.</div><details><summary>Wat koop je waar</summary>${r.mix.picks.map(x=>`<div class="br"><div>${x.qty>1?x.qty+"x ":""}${esc(x.name)}</div><div class="p">${esc(x.shop)} · ${eur(x.price)}</div></div>`).join("")}</details>`;
+  h+=`<p class="mut" style="margin:8px 0 0">${r.skipped?`${r.skipped} ${r.skipped===1?"product":"producten"} zonder prijs ${r.skipped===1?"is":"zijn"} niet meegeteld. `:""}Gebaseerd op de prijzen op het moment dat je een product op het lijstje zette.</p>`;
+  $("basket").innerHTML=h;
+}
 function renderLists(){
   const cnt=n=>(lists[n]||[]).filter(x=>!x.done).length;
   if(!listShop)listShop=[...BASESHOPS,...TANK,...customShops,...Object.keys(lists)].find(n=>(lists[n]||[]).length)||BASESHOPS[0];
@@ -648,6 +710,7 @@ function renderLists(){
   $("listTotal").innerHTML=arr.length?`<span>Nog te kopen</span><span>${eur(lineSum(arr))}</span>`:"";
   $("listNote").textContent=unknown?`${unknown} ${unknown===1?"product heeft":"producten hebben"} geen prijs en ${unknown===1?"telt":"tellen"} niet mee.`:"";
   const n=countAll();$("listCount").textContent=n?`(${n})`:"";
+  renderBasket();
 }
 function showTab(t){
   const l=t==="list";$("scanView").hidden=l;$("listView").hidden=!l;
@@ -656,6 +719,8 @@ function showTab(t){
 }
 $("tabScan").addEventListener("click",()=>showTab("scan"));
 $("tabList").addEventListener("click",()=>showTab("list"));
+$("basketAll").checked=!!store.get("basketAll",false);
+$("basketAll").addEventListener("change",()=>{store.set("basketAll",$("basketAll").checked);renderBasket()});
 $("shopAdd").addEventListener("submit",e=>{
   e.preventDefault();const n=addCustomShop($("shopName").value);if(!n)return;
   $("shopName").value="";listShop=n;store.set("listShop",n);fillShopSelect();renderLists();toast(`${n} toegevoegd`);
@@ -670,7 +735,7 @@ $("listAdd").addEventListener("submit",e=>{
   e.preventDefault();const name=$("liName").value.trim();if(!name)return;
   const raw=$("liPrice").value.replace(/[€\s]/g,"").replace(",","."),v=raw?parseFloat(raw):null;
   const arr=lists[listShop]=lists[listShop]||[];
-  arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:"",name,price:v>0?v:null,qty:1,done:false,alt:null});
+  arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:"",name,price:v>0?v:null,qty:1,done:false,alt:null,pm:v>0?{[listShop]:v}:null});
   $("liName").value="";$("liPrice").value="";saveLists();renderLists();
 });
 $("listItems").addEventListener("click",e=>{
