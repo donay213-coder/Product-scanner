@@ -76,6 +76,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .warnx{color:var(--red);font-weight:700}.osec{padding:10px 0 4px;border-top:1px solid var(--line);margin-top:10px}.osec h3{font-size:17px;margin:2px 0 6px}
 .olist{margin:4px 0;padding-left:20px}.olist li{margin:8px 0}.olist a{color:inherit}
 a.btn{text-decoration:none}a.btn.pri{background:var(--ink);color:var(--bg)}
+.oth{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}.oth summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;list-style:none}.oth summary::-webkit-details-marker{display:none}.oth summary::after{content:"▾";font-size:18px;color:var(--mut,#777);transition:transform .15s}.oth[open] summary::after{transform:rotate(180deg)}.og{padding:8px 0;border-bottom:1px solid var(--line)}.og:last-child{border:0}.ogh{display:flex;justify-content:space-between;align-items:center;gap:8px}.ogo{font-size:14px;margin-top:2px}.lnk{background:none;border:1px solid var(--line);border-radius:8px;padding:4px 10px;font:inherit;font-size:14px;cursor:pointer}
 .oldr{padding:8px 0;border-bottom:1px solid var(--line)}.oldr:last-child{border:0}.oldr .pp{font-weight:700;margin-top:2px}
 .hpanel{margin:6px 0 2px;padding:6px 10px;border-left:3px solid var(--line)}
 .trend{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.spark{flex:none}.okx{color:#038141;font-weight:700}
@@ -165,7 +166,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
   </form>
 
   <h2>Prijzen per winkel</h2>
-  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p>
+  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p><div id="others"></div>
     <div id="oldWrap" hidden><div class="row" style="align-items:center"><button id="oldBtn" type="button">Prijzen van een maand geleden</button><span class="mut">eenmalig ongeveer 2 MB</span></div><div id="oldOut" aria-live="polite"></div></div>
   </div>
 
@@ -308,28 +309,29 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-19ee465";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-fd2f0c9";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
 // Er bestaat geen gedeelde EAN-database voor supermarkten, dus we matchen op merk + naam + inhoud.
 
 const STOP = new Set(['de', 'het', 'een', 'en', 'met', 'van', 'voor', 'per', 'stuk', 'stuks', 'pak', 'fles', 'blik', 'zak', 'doos', 'pot', 'tray', 'x', 'bio', 'a', 'of', 'in', 'op', 'the', 'and']);
-const UNIT = 'kg|gram|gr|g|liter|ltr|ml|cl|dl|l';
+// Langere eenheden eerst, anders pakt de regex 'l' uit 'liters' of 'kg' uit 'kgrams'.
+const UNIT = 'kilograms?|kilo|kgrams?|kg|grams?|grm|gr|g|milliliters?|mililiters?|millilitres?|ml|centiliters?|cl|dl|liters?|litres?|ltr|l';
 const MULTI = new RegExp(`(\\d+)\\s*[x×]\\s*(\\d+(?:[.,]\\d+)?)\\s*(${UNIT})\\b`, 'gi');
 const SINGLE = new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${UNIT})\\b`, 'gi');
-const COUNT = /(\d+)\s*(?:stuks|stuk|st)\b/gi;
+const COUNT = /(\d+)\s*-?\s*(?:stuks|stuk|st|zakjes|zakje|rollen|rol|pack)\b/gi;
 
 const num = (s) => parseFloat(String(s).replace(',', '.'));
 
 function toBase(n, u) {
   u = u.toLowerCase();
-  if (u === 'kg') return { unit: 'g', amount: n * 1000 };
-  if (['g', 'gr', 'gram'].includes(u)) return { unit: 'g', amount: n };
-  if (['l', 'liter', 'ltr'].includes(u)) return { unit: 'ml', amount: n * 1000 };
+  if (/^(kg|kilo|kilograms?|kgrams?)$/.test(u)) return { unit: 'g', amount: n * 1000 };
+  if (/^(g|gr|grm|grams?)$/.test(u)) return { unit: 'g', amount: n };
+  if (/^(l|ltr|liters?|litres?)$/.test(u)) return { unit: 'ml', amount: n * 1000 };
   if (u === 'dl') return { unit: 'ml', amount: n * 100 };
-  if (u === 'cl') return { unit: 'ml', amount: n * 10 };
-  return { unit: 'ml', amount: n };
+  if (/^(cl|centiliters?)$/.test(u)) return { unit: 'ml', amount: n * 10 };
+  return { unit: 'ml', amount: n }; // ml, milliliter(s), mililiter(s), millilitre(s)
 }
 
 function parseSize(s) {
@@ -347,6 +349,7 @@ function parseSize(s) {
 
 function norm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/['’`´]s\b/g, 's') // Lay's = Lays, pinda's = pindas
     .replace(/&/g, ' en ').replace(/[^a-z0-9%,. ]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -382,7 +385,14 @@ function buildQuery({ name, brand, qty, q } = {}) {
 function prepareItem(p) {
   const price = Number(p.p);
   if (!p || !p.n || !Number.isFinite(price) || price <= 0) return null;
-  return { n: String(p.n), l: p.l || '', p: price, s: p.s || '', tokens: new Set(tokens(stripSize(p.n))), size: parseSize(p.s) || parseSize(p.n) };
+  let size = parseSize(p.s) || parseSize(p.n), pack = 0;
+  // "Coca Cola reg12x0.33" met grootte "0.33 L": een tray van 12, de grootte is per blikje. Alleen als het getal na de x gelijk is aan de grootte.
+  const m = /(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)/i.exec(String(p.n)), withUnit = new RegExp(MULTI.source, 'i');
+  if (m && size && !withUnit.test(String(p.n)) && !withUnit.test(String(p.s || ''))) {
+    const sNum = (String(p.s || '').replace(',', '.').match(/\d+(?:\.\d+)?/) || [])[0];
+    if (sNum && Math.abs(num(m[2]) - Number(sNum)) < 1e-9 && Number(m[1]) > 1) { pack = Number(m[1]); size = { unit: size.unit, amount: size.amount * pack }; }
+  }
+  return { n: String(p.n), l: p.l || '', p: price, s: p.s || '', tokens: new Set(tokens(stripSize(p.n))), size, pack };
 }
 
 function score(q, it) {
@@ -430,8 +440,7 @@ function findMatches(chains, q, { min = 0.6, high = 0.85 } = {}) {
       if (s > bs || (s === bs && best && s > 0 && it.p < best.p)) { bs = s; best = it; }
     }
     if (best && bs >= min) {
-      const up = unitPrice(best.p, best.size);
-      out.push({ chain: c.key, name: best.n, link: best.l, price: best.p, size: best.s, unit: up ? { v: Math.round(up.v * 100) / 100, label: up.label } : null, score: Math.round(bs * 100) / 100, confidence: bs >= high ? 'hoog' : 'middel' });
+      out.push(toRow(c.key, best, bs, high));
     }
   }
   return out.sort((a, b) => a.price - b.price);
@@ -561,7 +570,147 @@ function sparkPath(ph, now, w, h, pad) {
   return { d: d + `H${X(t1)}`, cx: X(t1), cy: Y(ph[ph.length - 1][1]) };
 }
 
-const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm, priceTrend, sparkPath, findMatchesRaw };
+
+// ---- Hetzelfde product, andere grootte of andere variant ----
+// Woorden die een andere smaak of variant aanduiden; verschillen ze tussen zoekvraag en product, dan is het niet hetzelfde product.
+const VARIANT = new Set(['zero', 'light', 'lite', 'cherry', 'vanilla', 'vanille', 'lime', 'lemon', 'citroen', 'mango', 'perzik', 'peach',
+  'framboos', 'aardbei', 'sinaasappel', 'orange', 'suikervrij', 'sugarfree', 'alcoholvrij', 'cafeinevrij', 'decaf', 'lactosevrij',
+  'glutenvrij', 'volle', 'halfvolle', 'magere', 'ongezouten', 'gezouten', 'pittig', 'spicy', 'max', '100', 'cher',
+  'stukje', 'houdbare', 'choco', 'chocolade', 'bio', 'barista']); // let op: woorden staan hier in de ingekorte vorm (stukjes → stukje)
+// Andere schrijfwijzen en afkortingen van hetzelfde variantwoord.
+const ALIAS = new Map(Object.entries({ cher: 'cherry', hv: 'halfvolle', halfvol: 'halfvolle', mager: 'magere', houdbaar: 'houdbare', lactosevrije: 'lactosevrij', lactofree: 'lactosevrij', lactose: 'lactosevrij',
+  suikervrije: 'suikervrij', glutenvrije: 'glutenvrij', alcoholvrije: 'alcoholvrij', cafeinevrije: 'cafeinevrij', biologisch: 'bio', biologische: 'bio' }));
+const vt = (t) => ALIAS.get(t) || t;
+// Woorden die in productnamen niets onderscheiden (Coca-Cola "Regular" = "Original Taste").
+const NOISE = new Set(['original', 'originele', 'taste', 'regular', 'reg', 'classic', 'klassiek', 'premium', 'los']); // '100' = 100% (pinda, fruit); 'naturel' staat vaak alleen in de naam
+function toRow(key, it, s, high = 0.85) {
+  const up = unitPrice(it.p, it.size);
+  return { chain: key, name: it.n, link: it.l, price: it.p, size: it.s, unit: up ? { v: Math.round(up.v * 100) / 100, label: up.label } : null, score: Math.round(s * 100) / 100, confidence: s >= high ? 'hoog' : 'middel' };
+}
+const fmtNum = (n) => String(Math.round(n * 100) / 100).replace('.', ',');
+function fmtSize(z) {
+  if (z.unit === 'ml') return z.amount >= 1000 ? `${fmtNum(z.amount / 1000)} l` : z.amount % 10 === 0 ? `${fmtNum(z.amount / 10)} cl` : `${fmtNum(z.amount)} ml`;
+  if (z.unit === 'g') return z.amount >= 1000 ? `${fmtNum(z.amount / 1000)} kg` : `${fmtNum(z.amount)} g`;
+  return `${fmtNum(z.amount)} ${z.amount === 1 ? 'stuk' : 'stuks'}`;
+}
+function sizeLabel(it) {
+  if (it.pack && it.size) return `${it.pack} × ${fmtSize({ unit: it.size.unit, amount: it.size.amount / it.pack })}`;
+  for (const src of [it.s, it.n]) {
+    const m = new RegExp(MULTI.source, 'i').exec(String(src || ''));
+    if (m) return `${m[1]} × ${fmtSize(toBase(num(m[2]), m[3]))}`;
+  }
+  return it.size ? fmtSize(it.size) : 'grootte onbekend';
+}
+// Score zonder grootte, op tokens zonder variantwoorden (zodat "Coca-Cola Zero" wel kandidaat is, maar als variant).
+function baseScore(q, it, qt, itT) {
+  let ov = 0;
+  for (const t of qt) if (itT.has(t)) ov++;
+  if (!ov || !itT.size || !qt.size) return 0;
+  let f = 0.6 * (ov / qt.size) + 0.4 * (ov / itT.size);
+  if (q.brand.size && ![...q.brand].some((t) => it.tokens.has(t))) f *= 0.35;
+  return f;
+}
+const noVariant = (set) => { const o = new Set([...set].filter((t) => !VARIANT.has(vt(t)) && !NOISE.has(t))); return o.size ? o : set; };
+// Hetzelfde product begint met het merk (eventueel na een winkelnaam): "Jack Daniel's ... Coca-Cola" is een ander product.
+const STORE_WORDS = new Set(['ah', 'jumbo', 'plus', 'dirk', 'spar', 'lidl', 'aldi', 'coop', 'vomar', 'hoogvliet', 'dekamarkt', 'poiesz', 'picnic']);
+const brandFirst = (q, it) => {
+  if (!q.brand.size) return true;
+  // winkelnamen vooraan overslaan, tenzij de winkel zelf het merk is (huismerk "Jumbo Pindakaas")
+  const first = [...it.tokens].find((t) => q.brand.has(t) || !STORE_WORDS.has(t));
+  return first == null || q.brand.has(first);
+};
+const variantsOf = (set) => [...new Set([...set].map(vt).filter((t) => VARIANT.has(t)))];
+// De woorden zoals ze in de productnaam staan (voor labels): "Stukjes", niet het ingekorte "stukje".
+function nameWords(it, set) {
+  const out = [];
+  for (const w of norm(it.n).split(/\s+/)) {
+    const t = [...tokens(w)][0];
+    if (!t || !set.has(vt(t))) continue;
+    const d = ALIAS.has(t) ? vt(t) : w;
+    if (!out.includes(d)) out.push(d);
+  }
+  return out;
+}
+// cls: 'same' (zelfde grootte en variant, zeker gekoppeld), 'size' (andere of onbekende grootte), 'variant' (andere smaak of onzeker).
+// Een zoekvraag zonder grootte heeft geen "zelfde": alles wat geen variant is, wordt per grootte gegroepeerd.
+function findCandidates(chains, q, { min = 0.6, perChain = 12, high = 0.85 } = {}) {
+  if (!q.tokens.size) return [];
+  const qt = noVariant(q.tokens), qv = variantsOf(q.tokens), out = [];
+  // Het product zelf (niet alleen het merk) moet in de naam staan: "Jumbo Mango" is geen Jumbo pindakaas.
+  const core = [...q.tokens].filter((t) => !q.brand.has(t) && !STORE_WORDS.has(t) && !NOISE.has(t) && !VARIANT.has(vt(t)));
+  for (const c of chains) {
+    const list = [];
+    // Toelaten op score zonder grootte, ordenen mét grootte: anders drukken veel goedkopere andere groottes het juiste product weg.
+    for (const it of c.items) {
+      const b = baseScore(q, it, qt, it.nv || (it.nv = noVariant(it.tokens))); // nv: per product één keer berekend
+      if (b < min) continue;
+      if (core.length && !core.some((t) => it.tokens.has(t))) continue;
+      if (q.size && it.size && it.size.unit !== q.size.unit && q.size.unit !== 'st' && it.size.unit !== 'st') continue; // liters naast grammen: ander soort product (stuks mag: multipack)
+      const sc = sizeCompare(q.size, it.size);
+      list.push([sc === 'same' ? Math.min(1, b + 0.15) : sc === 'diff' ? b * 0.4 : b, it, b]);
+    }
+    list.sort((a, b) => b[0] - a[0] || a[1].p - b[1].p);
+    for (const [full, it, b] of list.slice(0, perChain)) {
+      const iv = variantsOf(it.tokens), extra = iv.filter((t) => !qv.includes(t)), missing = qv.filter((t) => !iv.includes(t));
+      const row = toRow(c.key, it, full, high);
+      const cls = extra.length || missing.length ? 'variant' : !q.size || sizeCompare(q.size, it.size) !== 'same' ? 'size' : row.confidence === 'hoog' && brandFirst(q, it) ? 'same' : 'variant';
+      let words = extra.length ? nameWords(it, new Set(extra)) : [];
+      if (cls === 'variant' && !words.length) { // geen bekend variantwoord: het woord dat dit product onderscheidt ("Puur")
+        const own = new Set([...noVariant(it.tokens)].filter((t) => !q.tokens.has(t) && !STORE_WORDS.has(t) && !q.brand.has(t) && !/^\d/.test(t)));
+        words = nameWords(it, own).slice(0, 2);
+      }
+      out.push({ ...row, base: Math.round(b * 1000) / 1000, cls, variant: words, sizeLabel: sizeLabel(it) });
+    }
+  }
+  return out;
+}
+function findSame(chains, q, opts) {
+  return pickSame(findCandidates(chains, q, opts));
+}
+// per keten het beste 'zelfde product' uit al berekende kandidaten, goedkoopste eerst
+function pickSame(cands) {
+  const best = new Map();
+  for (const c of cands || []) {
+    if (c.cls !== 'same') continue;
+    const b = best.get(c.chain);
+    // gelijke score: de naam die het dichtst bij ligt, daarna de goedkoopste
+    if (!b || c.score > b.score || (c.score === b.score && (c.base > b.base || (c.base === b.base && c.price < b.price)))) best.set(c.chain, c);
+  }
+  return [...best.values()].sort((a, b) => a.price - b.price);
+}
+function findSameRaw(raw, q, opts) {
+  const toks = [...q.tokens];
+  const chains = (raw || []).filter((c) => c && Array.isArray(c.d)).map((c) => ({
+    key: String(c.n), items: c.d.filter((it) => it && it.n && toks.some((t) => norm(it.n).includes(t))).map(prepareItem).filter(Boolean),
+  }));
+  return findSame(chains, q, opts);
+}
+const cap = (w) => (w === '100' ? '100%' : w.charAt(0).toUpperCase() + w.slice(1));
+// q (optioneel): groepen met dezelfde eenheid als het gezochte product eerst (per liter bij drinken), dan andere eenheden, dan onbekend.
+function groupOthers(cands, q) {
+  const g = { size: new Map(), variant: new Map() };
+  for (const c of cands || []) {
+    if (c.cls !== 'size' && c.cls !== 'variant') continue;
+    const label = c.cls === 'size' ? c.sizeLabel : `${c.variant.length ? c.variant.map(cap).join(' ') : 'Andere variant'} · ${c.sizeLabel}`;
+    let grp = g[c.cls].get(label);
+    if (!grp) g[c.cls].set(label, (grp = { label, byChain: new Map() }));
+    const o = grp.byChain.get(c.chain);
+    if (!o || c.price < o.price) grp.byChain.set(c.chain, c);
+  }
+  const fin = (m) => [...m.values()].map((grp) => {
+    const offers = [...grp.byChain.values()].sort((a, b) => a.price - b.price).map((o) => ({ chain: o.chain, price: o.price, unit: o.unit, name: o.name, size: o.size }));
+    const b = offers[0];
+    const u = offers.find((o) => o.unit);
+    return { label: grp.label, name: b.name, q: parseSize(b.name) ? b.name : [b.name, b.size].filter(Boolean).join(' '), offers, unitLabel: u ? u.unit.label : null, minUnit: Math.min(...offers.map((o) => (o.unit ? o.unit.v : Infinity))) };
+  });
+  const all = [...g.size.values(), ...g.variant.values()].flatMap((grp) => [...grp.byChain.values()]).map((c) => c.unit && c.unit.label).filter(Boolean);
+  const pref = q && q.size ? { ml: 'l', g: 'kg', st: 'stuk' }[q.size.unit] : all.sort((a, b) => all.filter((x) => x === b).length - all.filter((x) => x === a).length)[0];
+  const rank = (x) => (x.unitLabel === pref ? 0 : x.unitLabel ? 1 : 2);
+  const sortG = (arr) => arr.sort((a, b) => rank(a) - rank(b) || a.minUnit - b.minUnit || a.offers[0].price - b.offers[0].price);
+  return { size: sortG(fin(g.size)), variant: sortG(fin(g.variant)) };
+}
+
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm, priceTrend, sparkPath, findMatchesRaw, findCandidates, findSame, pickSame, findSameRaw, groupOthers, sizeLabel };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
 
 })();</script>
@@ -1213,14 +1362,16 @@ async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} =
     prices.push({source:"Open Prices",shop,place,price:+it.price,cur:it.currency||"EUR",date:it.date,promo:!!it.price_is_discounted});
   }
   const q=Match.buildQuery({name:product?.name,brand:product?.brand,qty:product?.qty,q:qText});
+  let others=null;
   try{
     const chains=await loadCjb(strict);
-    const m=q.tokens.size?Match.findMatches(chains,q):[];
+    const cands=q.tokens.size?Match.findCandidates(chains,q):[],m=Match.pickSame(cands);
+    others=Match.groupOthers(cands,q);
     for(const x of m){const c=Shops.chainInfo(x.chain);prices.push({source:"Checkjebon",shop:c.name,place:"online prijs",matchedName:x.name,size:x.size,price:x.price,cur:"EUR",unit:x.unit,confidence:x.confidence,url:c.product&&x.link&&c.key==="ah"?c.product(x.link):c.search?c.search(q.text):""})}
     sources.checkjebon={status:"ok",producten:chains.reduce((n,c)=>n+c.items.length,0),gevonden:m.length,bijgewerkt:new Date(store.get("cjbTs",Date.now())).toISOString().slice(0,10)};
   }catch(e){sources.checkjebon={status:"niet bereikbaar",fout:String(e.message||e)}}
   const text=q.text||code;
-  return {ean:code,product,query:text,prices,links:Shops.links(text),sources,qa:{name:product?.name,brand:product?.brand,qty:product?.qty,q:qText}};
+  return {ean:code,product,query:text,prices,others,links:Shops.links(text),sources,qa:{name:product?.name,brand:product?.brand,qty:product?.qty,q:qText}};
 }
 async function fetchData(code,q,strict,known){ // opzoeken zonder iets te tekenen (ook voor verversen)
   try{
@@ -1237,7 +1388,7 @@ async function lookup(code,q){
   if(code&&!q&&names[code])q=names[code];
   showErr("");$("eanInput").value=code;$("result").hidden=false;
   $("prod").innerHTML=`<div class="ph"></div><div><h3>Bezig met zoeken…</h3><div class="mut">${esc(q||"EAN "+code)}</div></div>`;
-  $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";
+  $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";$("others").innerHTML="";
   $("result").scrollIntoView({behavior:"smooth",block:"start"});
   let d;
   try{d=await fetchData(code,q)}catch(e){showErr("Opzoeken mislukt: de server is niet bereikbaar.");return}
@@ -1253,6 +1404,17 @@ function collectPrices(){
   return out.filter(x=>x.cur==="EUR").sort((a,b)=>a.price-b.price).concat(out.filter(x=>x.cur!=="EUR"));
 }
 const chipHTML=a=>(a||[]).map(l=>`<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.name)} ↗</a>`).join("");
+/* ---------- Andere groottes, verpakkingen en smaken (apart, ingeklapt) ---------- */
+const nOthers=o=>o?o.size.length+o.variant.length:0;
+function othersHTML(o,noSame){
+  if(!nOthers(o))return "";
+  const grp=g=>`<div class="og"><div class="ogh"><b>${esc(g.label)}</b><button class="lnk" data-oq="${esc(g.q)}">Bekijk</button></div><div class="sub">${esc(g.name)}</div><div class="ogo">${g.offers.map(x=>`<span>${esc(Shops.chainInfo(x.chain).name)} ${eur(x.price)}${x.unit?` (${eur(x.unit.v)}/${esc(x.unit.label)})`:""}</span>`).join(" · ")}</div></div>`;
+  const sec=(t,gs,open)=>gs.length?`<details class="oth"${open?" open":""}><summary>${t} (${gs.length})</summary>${gs.map(grp).join("")}</details>`:"";
+  const openSize=noSame&&o.size.length>0;
+  return (openSize?`<p class="mut">Geen exact zelfde product gevonden. Kies hieronder een grootte.</p>`:"")
+    +sec("Andere groottes en verpakkingen",o.size,openSize)+sec("Andere smaken en varianten",o.variant,noSame&&!o.size.length);
+}
+$("others").addEventListener("click",e=>{const q=e.target.dataset?.oq;if(q)lookup("",q)});
 function sourceNote(s){
     const t=[],c=s.checkjebon;
   if(c)t.push(c.producten?`Supermarktprijzen uit Checkjebon (${c.gevonden} winkels gekoppeld, bijgewerkt ${c.bijgewerkt}${c.status==="verouderd"?", verouderd":""})`:`Supermarktprijzen niet beschikbaar (${c.status}${c.fout?": "+c.fout:""})`);
@@ -1283,8 +1445,10 @@ function render(){
     const name=u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.shop)}</a>`:esc(x.shop);
     const sub=[x.matchedName?`Gevonden als: ${x.matchedName}${x.size?" ("+x.size+")":""}`:x.place,x.unit?`${eur(x.unit.v)} per ${x.unit.label}`:"",x.date&&new Date(x.date).toLocaleDateString("nl-NL",{day:"numeric",month:"short",year:"numeric"})].filter(Boolean).join(" · ");
     return `<li><div><strong>${name}</strong><span class="src">${esc(x.source)}</span>${x.promo?'<span class="src">aanbieding</span>':""}${x.confidence==="middel"?'<span class="src warn">controleer variant</span>':""}<div class="sub">${esc(sub)}${x.mine?` <button class="del" data-del="${esc(x.id)}">verwijderen</button>`:""}</div><button class="addbtn" data-add="${i}">+ Op lijstje ${esc(x.shop)}</button></div><div><div class="p">${money(x.price,x.cur)}</div>${dd!=null?`<div class="diff ${dd===0?"best":""}">${dd===0?"laagste":"+"+eur(dd)}</div>`:""}</div></li>`}).join("")
+    :nOthers(d.others)?`<li><div class="mut">Geen prijs voor precies dit product. Hieronder staan andere groottes en varianten.</div></li>`
     :`<li><div class="mut">Nog geen prijzen gevonden. Probeer hierboven de productnaam te typen, zoek via de links hieronder, of voeg zelf een prijs toe.</div></li>`;
   $("pricesNote").textContent=sourceNote(d.sources||{});
+  $("others").innerHTML=othersHTML(d.others,!(d.sources?.checkjebon?.gevonden));
   const L=d.links,q=encodeURIComponent(d.query||current.code);
   $("promos").innerHTML=L?chipHTML(L.promos):"";
   $("chips").innerHTML=L?chipHTML(L.shops):SHOPS.map(s=>`<a href="${s[1]}${q}" target="_blank" rel="noopener">${esc(s[0])} ↗</a>`).join("");
@@ -1434,8 +1598,8 @@ async function findAlternatives(){
     const items=best.items.map(x=>({...x}));
     if(chains)for(const it of items){
       const q=Match.buildQuery({name:it.name,brand:it.brand,qty:it.qty});
-      const m=q.tokens.size?Match.findMatches(chains,q).filter(x=>x.confidence==="hoog"):[];
-      if(m.length){const b=m.reduce((a,c)=>c.price<a.price?c:a);it.price=b.price;it.shop=Shops.chainInfo(b.chain).name}
+      const m=q.tokens.size?Match.findSame(chains,q):[];
+      if(m.length){const b=m[0];it.price=b.price;it.shop=Shops.chainInfo(b.chain).name}
     }
     const shown=Health.sortAlternatives(items).slice(0,5),fit=prefsOn();
     out.innerHTML=`<p class="mut" style="margin:12px 0 0">${cur.grade?`Betere Nutri-Score dan ${cur.grade.toUpperCase()}`:"Producten met Nutri-Score A of B"}, gezondst eerst:</p>`
@@ -1597,9 +1761,9 @@ async function showOld(){
   try{
     const s=await loadOld();if(current!==mine)return;
     const q=Match.buildQuery(mine.data.qa);let nowM=[];
-    try{nowM=Match.findMatches(await loadCjb(),q)}catch(e){}
+    try{nowM=Match.findSame(await loadCjb(),q)}catch(e){}
     if(current!==mine)return;
-    const rows=History.compareThenNow(Match.findMatchesRaw(s.raw,q),nowM);
+    const rows=History.compareThenNow(Match.findSameRaw(s.raw,q),nowM);
     $("oldOut").innerHTML=rows.length?`<p class="mut" style="margin:10px 0 2px">Supermarktprijzen op ${fmtDay(s.date)} en nu:</p>`+rows.map(r=>`<div class="oldr"><div><strong>${esc(Shops.chainInfo(r.chain).name)}</strong> <span class="mut">${esc(r.name)}${r.size?` (${esc(r.size)})`:""}</span>${r.sure?"":' <span class="src warn">controleer variant</span>'}${r.other?' <span class="mut">· toen een ander product</span>':""}</div><div class="pp">${r.then!=null?eur(r.then):"niet gevonden"} → ${r.now!=null?"nu "+eur(r.now):"nu niet gevonden"}${diffHTML(r.diff)}</div></div>`).join("")
       :`<p class="mut">Geen supermarktprijzen gevonden op ${fmtDay(s.date)}.</p>`;
   }catch(e){if(current===mine)$("oldOut").innerHTML=`<p class="mut">${oldMsg(e)}</p>`}
@@ -1616,7 +1780,7 @@ function oldLine(x){
   const key=x.id+"|"+listShop+"|"+oldSnap.date;
   if(!oldItemCache.has(key)){
     const q=Match.buildQuery(x.mq?x.mq:x.q?{q:x.q}:{name:x.name});
-    const m=Match.findMatchesRaw(oldSnap.raw,q).find(mm=>Shops.chainInfo(mm.chain).name===listShop);
+    const m=Match.findSameRaw(oldSnap.raw,q).find(mm=>Shops.chainInfo(mm.chain).name===listShop);
     oldItemCache.set(key,m||null);
   }
   const m=oldItemCache.get(key),then=m?m.price:null,now=x.price;
@@ -1757,6 +1921,7 @@ async function refreshPrices(manual){
     try{
       const d=await fetchData(job.ean,job.ean?(names[job.ean]||""):job.q,true,job.mq);
       if(!Match.freshOk(d.sources))throw new Error("bron niet volledig");
+      if(d.others&&!(d.sources.checkjebon&&d.sources.checkjebon.gevonden)&&!Match.buildQuery(d.qa||{}).size)throw new Error("grootte onbekend");
       if(job.ean&&!(d.product&&d.product.name)&&!names[job.ean])throw new Error("productgegevens ontbreken");
       const mine=store.get("mine:"+(job.ean||job.q),[]).map(m=>({...m,cur:"EUR"}));
       const pm=Match.minByShop([...(d.prices||[]),...mine]);
@@ -1872,8 +2037,8 @@ async function showOrder(){
   // Alleen een zekere koppeling gaat het winkelmandje in; anders een zoeklink.
   const findLink=(key,it)=>{
     const c=chains&&chains.find(x=>x.key===key);if(!c)return null;
-    const m=Match.findMatches([c],Match.buildQuery(it.mq?it.mq:it.q?{q:it.q}:{q:it.name}))[0];
-    return m&&m.confidence==="hoog"?m.link:null;
+    const m=Match.findSame([c],Match.buildQuery(it.mq?it.mq:it.q?{q:it.q}:{q:it.name}))[0];
+    return m?m.link:null;
   };
   const plan=Order.orderPlan(lists,findLink);
   $("orderOut").innerHTML=!plan.length?`<p class="mut">Er staat niets op je lijstjes om te bestellen.</p>`
