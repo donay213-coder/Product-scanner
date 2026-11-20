@@ -73,7 +73,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 #prefsSummary{margin-left:6px;font-weight:400}
 .alg{margin-top:10px;font-size:15px}.alg .hit{color:var(--red);font-weight:800}
 .linkbtn{background:none;border:0;padding:0 4px;min-height:44px;display:inline-flex;align-items:center;text-decoration:underline;color:inherit;font:inherit;cursor:pointer}
-.warnx{color:var(--red);font-weight:700}.okx{color:#038141;font-weight:700}
+.warnx{color:var(--red);font-weight:700}.trend{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.spark{flex:none}.okx{color:#038141;font-weight:700}
 .pref{margin-top:10px;padding:9px 12px;border-radius:10px;font-size:15px;font-weight:600}
 .pref.ok{background:rgba(3,129,65,.14)}.pref.bad{background:rgba(230,62,17,.14)}.pref.unk{background:rgba(120,120,120,.16)}
 .pl{display:flex;align-items:center;gap:8px;min-height:44px}.pl input{width:22px;min-height:22px}
@@ -294,7 +294,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-5d76539";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-59b132c";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -514,7 +514,30 @@ function alarmHit(it) {
 }
 const newAlarm = (prev, hit) => !!hit && (!prev || hit.price < prev.price - 0.005);
 
-const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm };
+
+// Prijsverloop: vergelijk met de prijs van een maand geleden, of met de eerste meting als het product korter op het lijstje staat.
+const DAY = 24 * HOUR;
+function priceTrend(ph, now) {
+  if (!Array.isArray(ph) || ph.length < 2) return null;
+  const last = ph[ph.length - 1][1], cut = now - 30 * DAY;
+  let ref = ph[0], month = false;
+  if (ph[0][0] <= cut) { month = true; for (const e of ph) if (e[0] <= cut) ref = e; }
+  return { month, refT: ref[0], ref: ref[1], now: last, diff: r2(last - ref[1]) };
+}
+// Sparklijn als trap (een prijs geldt tot de volgende wijziging), van de eerste meting tot nu. Hoogste prijs boven.
+function sparkPath(ph, now, w, h, pad) {
+  const t0 = ph[0][0];
+  let t1 = Math.max(now, ph[ph.length - 1][0]);
+  if (t1 <= t0) t1 = t0 + 1;
+  const ps = ph.map((e) => e[1]), lo = Math.min(...ps), hi = Math.max(...ps), r1 = (n) => Math.round(n * 10) / 10;
+  const X = (t) => r1(pad + ((t - t0) / (t1 - t0)) * (w - 2 * pad));
+  const Y = (p) => r1(hi === lo ? h / 2 : pad + ((hi - p) / (hi - lo)) * (h - 2 * pad));
+  let d = `M${X(ph[0][0])} ${Y(ph[0][1])}`;
+  for (let i = 1; i < ph.length; i++) d += `H${X(ph[i][0])}V${Y(ph[i][1])}`;
+  return { d: d + `H${X(t1)}`, cx: X(t1), cy: Y(ph[ph.length - 1][1]) };
+}
+
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm, priceTrend, sparkPath };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
 
 })();</script>
@@ -1242,12 +1265,20 @@ function renderAllergens(){
   el.innerHTML=`<div class="alg">${parts.join(" · ")}</div>`+(prefsOn()?"":`<div class="mut">Volgens Open Food Facts, controleer altijd de verpakking.</div><button class="linkbtn" data-open-prefs="1">Mijn allergieën instellen</button>`);
 }
 $("allergens").addEventListener("click",e=>{if(e.target.dataset&&e.target.dataset.openPrefs){$("prefsBox").open=true;$("prefsWrap").scrollIntoView({behavior:"smooth",block:"start"})}});
+const fmtDay=t=>new Date(t).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
+// Prijsverloop: sparklijn (rustige lijn, laatste punt in nadrukkleur) en de prijs van een maand geleden of sinds toevoegen.
+function trendLine(x){
+  const now=Date.now(),tr=Match.priceTrend(x.ph,now);if(!tr)return "";
+  const sp=Match.sparkPath(x.ph,now,76,22,5),lab="Prijsverloop: "+x.ph.map(([t,p])=>`${eur(p)} op ${fmtDay(t)}`).join(", ");
+  const d=tr.diff?` (<span class="${tr.diff<0?"okx":"warnx"}">${tr.diff<0?"▼":"▲"} ${eur(Math.abs(tr.diff))}</span>)`:" (gelijk)";
+  return `<div class="sub trend"><svg class="spark" viewBox="0 0 76 22" width="76" height="22" role="img" aria-label="${esc(lab)}"><path d="${sp.d}" fill="none" stroke="var(--mut)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${sp.cx}" cy="${sp.cy}" r="4" fill="var(--ink)"/></svg><span>${tr.month?"een maand geleden":"sinds "+fmtDay(tr.refT)} ${eur(tr.ref)}, nu ${eur(tr.now)}${d}</span></div>`;
+}
 function histLine(x){
   if(!HAS_MATCH)return "";
   const st=Match.priceStats(x.ph);
   const al=x.tgt?(x.hit?`<span class="okx">🔔 ${eur(x.hit.price)} bij ${esc(x.hit.shop)}, onder je richtprijs ${eur(x.tgt)}</span>`:`🔔 richtprijs ${eur(x.tgt)}`):"";
   const t=[st?`laagste ${eur(st.min)} · hoogste ${eur(st.max)}`:"",al].filter(Boolean).join(" · ");
-  return t?`<div class="sub">${t}</div>`:"";
+  return trendLine(x)+(t?`<div class="sub">${t}</div>`:"");
 }
 // Wat een lijstje nodig heeft om te waarschuwen (klein gehouden: geen volledige ingrediëntenlijst).
 const alOf=p=>p&&Array.isArray(p.alg)?{diet:p.diet||[],alg:p.alg,traces:p.traces||[],ingDone:!!p.ingDone,halalLab:!!p.halalLab,halalBad:p.halalBad||[],gelatin:!!p.gelatin}:null;
