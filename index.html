@@ -128,7 +128,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
     <div id="best"></div>
   </div>
   <form class="ean" id="nameForm">
-    <input id="nameInput" placeholder="Klopt het product niet? Typ de naam, bv. Calvé pindakaas 650 g" aria-label="Productnaam">
+    <input id="nameInput" placeholder="Product onbekend of fout? Typ de naam, bv. Calvé pindakaas 650 g" aria-label="Productnaam">
     <button type="submit">Zoek</button>
   </form>
 
@@ -138,6 +138,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
   <h2>Prijs toevoegen</h2>
   <form class="add card" id="addForm">
     <select id="shop" aria-label="Winkel"></select>
+    <input id="newShop" hidden placeholder="Naam van de winkel" aria-label="Naam van de nieuwe winkel" style="grid-column:1/-1" maxlength="40">
     <input id="price" inputmode="decimal" placeholder="Prijs, bv. 2,49" aria-label="Prijs in euro" required>
     <button class="pri" type="submit">Opslaan</button>
   </form>
@@ -163,6 +164,10 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 <section id="listView" hidden>
   <h2 style="margin-top:8px">Boodschappenlijstje per winkel</h2>
   <select id="listShop" aria-label="Winkel" style="width:100%;margin-bottom:12px"></select>
+  <form class="ean" id="shopAdd" style="margin:0 0 12px">
+    <input id="shopName" placeholder="Nieuwe winkel, bv. Buurtsuper Jansen" aria-label="Naam van de nieuwe winkel" maxlength="40">
+    <button type="submit">Winkel toevoegen</button>
+  </form>
   <form class="addform" id="listAdd">
     <input id="liName" placeholder="Product, bv. halfvolle melk" aria-label="Product" required>
     <input id="liPrice" inputmode="decimal" placeholder="Prijs (optioneel)" aria-label="Prijs in euro">
@@ -173,6 +178,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
     <button id="listShare">Deel lijstje</button>
     <button id="listClearDone">Gekochte weghalen</button>
     <button id="listClearAll">Lijstje leegmaken</button>
+    <button id="shopDel" hidden>Winkel verwijderen</button>
   </div>
   <p class="mut">Lijstjes worden op dit apparaat bewaard en zijn niet gesynchroniseerd met andere apparaten.</p>
 </section>
@@ -391,8 +397,28 @@ const money=(n,c)=>{try{return new Intl.NumberFormat("nl-NL",{style:"currency",c
 const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let stream=null,scanning=false,zx=null,current=null,lastCode="",lastAt=0;
 
-$("shop").innerHTML=SHOPS.filter(s=>s[0]!=="Checkjebon").map(s=>`<option>${esc(s[0])}</option>`).join("")+"<option>Andere winkel</option>";
-$("shop").value=store.get("lastShop","Albert Heijn");
+const BASESHOPS=SHOPS.map(s=>s[0]).filter(n=>n!=="Checkjebon");
+const TANK=["Shell","BP","Esso","TinQ","Tango","Texaco","TotalEnergies","Q8","Argos","Avia"];
+let customShops=store.get("customShops",[]),names=store.get("names",{});
+const groupOpts=(label,arr,cnt)=>arr.length?`<optgroup label="${esc(label)}">${arr.map(n=>{const c=cnt?cnt(n):0;return `<option value="${esc(n)}">${esc(n)}${c?` (${c})`:""}</option>`}).join("")}</optgroup>`:"";
+function shopOptions(cnt,extra){
+  const known=new Set([...BASESHOPS,...TANK,...customShops]);
+  const other=(extra||[]).filter(n=>!known.has(n));
+  return groupOpts("Supermarkten en drogisten",BASESHOPS,cnt)+groupOpts("Tankstations",TANK,cnt)+groupOpts("Eigen winkels",customShops,cnt)+groupOpts("Overig",other,cnt);
+}
+function addCustomShop(n){
+  n=String(n||"").trim().slice(0,40);if(!n)return "";
+  const all=[...BASESHOPS,...TANK,...customShops];
+  const hit=all.find(x=>x.toLowerCase()===n.toLowerCase());if(hit)return hit;
+  customShops.push(n);store.set("customShops",customShops);return n;
+}
+function fillShopSelect(sel){
+  $("shop").innerHTML=shopOptions()+'<option value="__new">+ Nieuwe winkel toevoegen…</option>';
+  $("shop").value=sel||store.get("lastShop","Albert Heijn");
+  if($("shop").value==="")$("shop").value="Albert Heijn";
+  $("newShop").hidden=$("shop").value!=="__new";
+}
+fillShopSelect();
 
 function showErr(t){$("err").textContent=t;$("err").hidden=!t}
 
@@ -498,6 +524,7 @@ async function viaBrowser(code,qText){ // zonder server: alles in de browser
 async function lookup(code,q){
   code=code||"";
   if(!q&&!/^\d{6,14}$/.test(code)){showErr("Dat lijkt geen geldige barcode.");return}
+  if(code&&!q&&names[code])q=names[code];
   showErr("");$("eanInput").value=code;$("result").hidden=false;
   $("prod").innerHTML=`<div class="ph"></div><div><h3>Bezig met zoeken…</h3><div class="mut">${esc(q||"EAN "+code)}</div></div>`;
   $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";
@@ -510,6 +537,7 @@ async function lookup(code,q){
     if(typeof Match==="undefined"){showErr("Opzoeken mislukt: de server is niet bereikbaar.");return}
     d=await viaBrowser(code,q);
   }
+  if(code&&names[code]&&!(d.product&&d.product.name))d.product={...(d.product||{}),name:names[code],brand:"",qty:"",img:"",nutri:"",nova:"",eco:""};
   current={code,data:d};
   if(code)addHistory({code,name:d.product?.name||code});
   render();
@@ -564,10 +592,12 @@ $("addForm").addEventListener("submit",e=>{
   e.preventDefault();if(!current)return;
   const v=parseFloat($("price").value.replace(/[€\s]/g,"").replace(",","."));
   if(!(v>0)){$("price").focus();return}
-  const k=mineKey(),arr=store.get(k,[]),shop=$("shop").value;
+  let shop=$("shop").value;
+  if(shop==="__new"){shop=addCustomShop($("newShop").value);if(!shop){$("newShop").focus();return}$("newShop").value=""}
+  const k=mineKey(),arr=store.get(k,[]);
   const i=arr.findIndex(x=>x.shop===shop);const row={id:Date.now().toString(36),shop,price:v,date:new Date().toISOString().slice(0,10)};
   if(i>=0)arr[i]=row;else arr.push(row);
-  store.set(k,arr);store.set("lastShop",shop);$("price").value="";render();
+  store.set(k,arr);store.set("lastShop",shop);fillShopSelect(shop);$("price").value="";render();
 });
 $("prices").addEventListener("click",e=>{
   const ai=e.target.dataset?.add;if(ai!=null&&ai!==""){addToList(current.rows[+ai]);return}
@@ -584,7 +614,6 @@ function drawHistory(){
 $("hist").addEventListener("click",e=>{const c=e.target.closest("button")?.dataset.code;if(c)lookup(c)});
 
 /* ---------- Boodschappenlijstjes per winkel ---------- */
-const SHOPNAMES=SHOPS.map(s=>s[0]).filter(n=>n!=="Checkjebon");
 let lists=store.get("lists",{}),listShop=store.get("listShop","");
 const saveLists=()=>store.set("lists",lists);
 let toastT=0;
@@ -606,10 +635,12 @@ function addToList(row){
 const countAll=()=>Object.values(lists).reduce((n,a)=>n+a.filter(x=>!x.done).length,0);
 const lineSum=a=>a.reduce((t,x)=>x.price!=null&&!x.done?t+x.price*x.qty:t,0);
 function renderLists(){
-  const names=[...new Set([...SHOPNAMES,...Object.keys(lists)])];
-  if(!listShop)listShop=names.find(n=>(lists[n]||[]).length)||names[0];
-  $("listShop").innerHTML=names.map(n=>{const c=(lists[n]||[]).filter(x=>!x.done).length;return `<option value="${esc(n)}">${esc(n)}${c?` (${c})`:""}</option>`}).join("");
+  const cnt=n=>(lists[n]||[]).filter(x=>!x.done).length;
+  if(!listShop)listShop=[...BASESHOPS,...TANK,...customShops,...Object.keys(lists)].find(n=>(lists[n]||[]).length)||BASESHOPS[0];
+  $("listShop").innerHTML=shopOptions(cnt,Object.keys(lists)||[]);
+  if(!$("listShop").innerHTML.includes(`value="${esc(listShop)}"`))$("listShop").innerHTML+=groupOpts("Overig",[listShop],cnt);
   $("listShop").value=listShop;
+  $("shopDel").hidden=!customShops.includes(listShop);
   const arr=lists[listShop]||[];
   $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button></div></div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
     :`<p class="mut" style="margin:6px 0">Nog niets op het lijstje van ${esc(listShop)}. Voeg hierboven iets toe, of kies bij een scan "Op lijstje".</p>`;
@@ -625,6 +656,15 @@ function showTab(t){
 }
 $("tabScan").addEventListener("click",()=>showTab("scan"));
 $("tabList").addEventListener("click",()=>showTab("list"));
+$("shopAdd").addEventListener("submit",e=>{
+  e.preventDefault();const n=addCustomShop($("shopName").value);if(!n)return;
+  $("shopName").value="";listShop=n;store.set("listShop",n);fillShopSelect();renderLists();toast(`${n} toegevoegd`);
+});
+$("shopDel").addEventListener("click",()=>{
+  if((lists[listShop]||[]).length){toast("Maak eerst het lijstje leeg");return}
+  customShops=customShops.filter(x=>x!==listShop);store.set("customShops",customShops);delete lists[listShop];saveLists();
+  listShop="";store.set("listShop","");fillShopSelect();renderLists();
+});
 $("listShop").addEventListener("change",e=>{listShop=e.target.value;store.set("listShop",listShop);renderLists()});
 $("listAdd").addEventListener("submit",e=>{
   e.preventDefault();const name=$("liName").value.trim();if(!name)return;
@@ -658,11 +698,17 @@ $("listShare").addEventListener("click",async()=>{
 $("best").addEventListener("click",e=>{const i=e.target.dataset?.add;if(i!=null&&i!=="")addToList(current.rows[+i])});
 renderLists();
 
+$("shop").addEventListener("change",()=>{const n=$("shop").value==="__new";$("newShop").hidden=!n;if(n)$("newShop").focus()});
 $("startBtn").addEventListener("click",startCam);
 $("stopBtn").addEventListener("click",stopCam);
 $("photo").addEventListener("change",e=>{const f=e.target.files[0];if(f)scanPhoto(f);e.target.value=""});
 $("eanForm").addEventListener("submit",e=>{e.preventDefault();lookup($("eanInput").value.trim())});
-$("nameForm").addEventListener("submit",e=>{e.preventDefault();const q=$("nameInput").value.trim();if(q)lookup("",q)});
+$("nameForm").addEventListener("submit",e=>{
+  e.preventDefault();const q=$("nameInput").value.trim();if(!q)return;
+  const code=current&&current.code;
+  if(code&&!(current.data.product&&current.data.product.name&&!names[code])){names[code]=q.slice(0,80);store.set("names",names);lookup(code,names[code]);return}
+  lookup("",q);
+});
 drawHistory();
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
