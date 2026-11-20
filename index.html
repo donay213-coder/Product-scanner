@@ -6,21 +6,20 @@
 <meta name="theme-color" content="#111111">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Prijsscanner">
 <title>Prijsscanner</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 /* VOICE: nuchter en snel, als een kassabon
    IDEA: een schapkaartje / prijsetiket uit de supermarkt
    PICTURE: de camerazoeker met scanlijn, daarna het etiket met de laagste prijs
-   COLOUR and TYPE: wit/zwart, etiketgeel #ffd400, rood #d7261e voor duurder; Schibsted Grotesk
+   COLOUR and TYPE: wit/zwart, etiketgeel #ffd400, rood #d7261e voor duurder; systeemlettertype (geen externe lettertypes, privacy)
    LAYOUT: één kolom, max 640px, duim-vriendelijk */
 :root{color-scheme:light dark;--bg:light-dark(#f2f0ec,#121212);--card:light-dark(#fff,#1d1d1d);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#666,#a5a5a5);--line:light-dark(#dedad3,#333);--tag:#ffd400;--red:#d7261e;--ok:#0a7a3d}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Schibsted Grotesk",system-ui,sans-serif;overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow-x:clip}
 main{max-width:640px;margin:0 auto;padding:16px 16px 64px}
 header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 0 14px}
 h1{font-size:32px;line-height:1.05;margin:0;font-weight:800}
@@ -65,6 +64,12 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .ns i.on{opacity:1;width:32px;height:36px;font-size:20px;border-radius:8px;box-shadow:0 0 0 2px var(--card),0 0 0 3.5px var(--ink)}
 .chip{font-size:13px;border:1.5px solid var(--line);border-radius:99px;padding:3px 10px;white-space:nowrap}
 .chip b{font-weight:800}
+#aboutBox h3{font-size:16px;margin:14px 0 4px}#aboutBox ul{padding-left:20px;margin:4px 0}#aboutBox li{margin:4px 0}#aboutBox a{color:inherit}
+.diag{list-style:none;padding:0;margin:8px 0}.diag li{padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}.diag li:last-child{border:0}
+.d-fail strong,.d-fail .mk{color:var(--red)}.d-warn .mk{color:#b06000}.d-ok .mk{color:#038141}.mk{font-weight:800;display:inline-block;width:1.2em}
+.alg{margin-top:10px;font-size:15px}.alg .hit{color:var(--red);font-weight:800}
+.linkbtn{background:none;border:0;padding:0 4px;min-height:44px;display:inline-flex;align-items:center;text-decoration:underline;color:inherit;font:inherit;cursor:pointer}
+.warnx{color:var(--red);font-weight:700}.okx{color:#038141;font-weight:700}
 .pref{margin-top:10px;padding:9px 12px;border-radius:10px;font-size:15px;font-weight:600}
 .pref.ok{background:rgba(3,129,65,.14)}.pref.bad{background:rgba(230,62,17,.14)}.pref.unk{background:rgba(120,120,120,.16)}
 .pl{display:flex;align-items:center;gap:8px;min-height:44px}.pl input{width:22px;min-height:22px}
@@ -136,6 +141,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
   <div class="card">
     <div class="prod" id="prod"></div>
     <div class="grades" id="grades"></div>
+    <div id="allergens"></div>
     <div id="prefBadge"></div>
     <div id="best"></div>
     <div id="altWrap" hidden>
@@ -186,6 +192,49 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
   <h2>Eerder gescand</h2>
   <div class="row hist" id="hist"></div>
 </section>
+
+<section id="aboutWrap">
+  <h2>Over deze app</h2>
+  <div class="card" id="diagCard" hidden>
+    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Werkt alles?</p>
+    <p class="mut" style="margin:0 0 8px">Test of de camera, de opslag en alle prijsbronnen op dit apparaat werken. Kost een paar kleine verzoeken, en de supermarktdata als die nog niet geladen was.</p>
+    <button id="diagBtn" type="button">Test de app</button>
+    <p id="diagSum" aria-live="polite"></p>
+    <ul class="diag" id="diagOut"></ul>
+    <button id="diagCopy" type="button" hidden>Kopieer resultaat</button>
+  </div>
+  <details class="card" id="aboutBox" style="margin-top:12px">
+    <summary>Over deze app en privacy</summary>
+    <h3>Wat de app doet</h3>
+    <p>Prijsscanner zoekt bij een barcode of productnaam de prijzen op die openlijk beschikbaar zijn en laat zien waar het product het goedkoopst is. Supermarktprijzen zijn online prijzen en kunnen in de winkel anders zijn; weekacties staan er niet altijd in. Prijzen zijn een indicatie.</p>
+    <h3>Privacy</h3>
+    <ul>
+      <li>Er is geen account, geen advertenties, geen tracking en geen statistieken.</li>
+      <li>Alles wat je invoert (lijstjes, eigen prijzen, winkels, productnamen, voorkeuren en allergieën) blijft op dit apparaat. Niemand anders kan erbij, ook de maker van de app niet. Je wist het door je browsergegevens voor deze site te wissen.</li>
+      <li>Je voorkeuren en allergieën worden nooit verstuurd: het filteren gebeurt op je telefoon.</li>
+      <li>Wat de telefoon wel verlaat:
+        <ul>
+          <li>bij scannen en verversen: de barcode of productnaam naar Open Food Facts en Open Prices;</li>
+          <li>bij "Gezondere keuzes": de productcategorie naar Open Food Facts;</li>
+          <li>de supermarktprijzen: één bestand van Checkjebon, gedownload via jsDelivr of GitHub;</li>
+          <li>de barcodelezer ZXing van unpkg.com, alleen als je browser zelf geen barcodes kan lezen;</li>
+          <li>productfoto's van Open Food Facts.</li>
+        </ul>
+        Deze diensten zien, zoals elke website, je IP-adres. De app wordt gehost op GitHub Pages; ook GitHub ziet je IP-adres als je de app opent.</li>
+      <li>Links naar winkels, folders en webshops openen pas als je erop tikt.</li>
+    </ul>
+    <h3>Geen medisch advies</h3>
+    <p>Nutri-Score, allergenen en vegetarisch/vegan komen uit Open Food Facts, ingevuld door vrijwilligers, en kunnen onvolledig of verouderd zijn. Dit is geen medisch advies: controleer altijd de verpakking.</p>
+    <h3>Bronnen en licenties</h3>
+    <ul>
+      <li><a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>: productgegevens onder de Open Database License (ODbL), losse gegevens onder de Database Contents License, productfoto's onder Creative Commons Naamsvermelding-GelijkDelen (CC BY-SA).</li>
+      <li><a href="https://prices.openfoodfacts.org" target="_blank" rel="noopener">Open Prices</a> van Open Food Facts: door gebruikers ingestuurde prijzen onder de Open Database License (ODbL).</li>
+      <li><a href="https://www.checkjebon.nl" target="_blank" rel="noopener">Checkjebon</a>: online supermarktprijzen onder de MIT-licentie.</li>
+      <li>ZXing (barcodelezer): Apache-licentie 2.0.</li>
+    </ul>
+    <p class="mut">Versie <span id="appVersion">ontwikkelversie</span></p>
+  </details>
+</section>
 </div>
 
 <section id="listView" hidden>
@@ -219,12 +268,26 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <button id="listClearAll">Lijstje leegmaken</button>
     <button id="shopDel" hidden>Winkel verwijderen</button>
   </div>
+  <div class="card" id="backupCard" hidden style="margin-top:12px">
+    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Back-up</p>
+    <p class="mut" style="margin:0 0 8px">Lijstjes, eigen prijzen, winkels en voorkeuren staan alleen op dit apparaat. Maak een back-up (bijvoorbeeld in iCloud Drive of je mail) en zet die terug op een ander apparaat of na het wissen van je browser.</p>
+    <div class="row" style="margin:0">
+      <button id="bkExport" type="button">Back-up maken</button>
+      <label class="btn" for="bkFile">Back-up terugzetten</label>
+      <input type="file" id="bkFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="mut" id="bkMsg" aria-live="polite"></p>
+    <div id="bkConfirm" hidden>
+      <p id="bkSum" style="font-weight:600"></p>
+      <div class="row" style="margin:0"><button class="pri" id="bkYes" type="button">Vervangen</button><button id="bkNo" type="button">Annuleren</button></div>
+    </div>
+  </div>
   <p class="mut">Lijstjes worden op dit apparaat bewaard en zijn niet gesynchroniseerd met andere apparaten.</p>
 </section>
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-83b1263";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -421,7 +484,30 @@ function ageText(ts, now) {
   return `${d} ${d === 1 ? 'dag' : 'dagen'} geleden`;
 }
 
-const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText };
+
+// ---- Prijsgeschiedenis en prijsalarm ----
+// ph: [[tijd, prijs], ...]; een nieuw punt alleen als de prijs verandert.
+function recordPrice(ph, t, price, max = 30) {
+  const arr = Array.isArray(ph) ? ph.slice() : [];
+  if (price == null || !(price > 0)) return arr;
+  const last = arr[arr.length - 1];
+  if (!last || Math.abs(last[1] - price) >= 0.005) arr.push([t, price]);
+  return arr.slice(-max);
+}
+function priceStats(ph) {
+  if (!Array.isArray(ph) || ph.length < 2) return null;
+  const ps = ph.map((x) => x[1]);
+  return { min: Math.min(...ps), max: Math.max(...ps), n: ph.length, since: ph[0][0] };
+}
+// Goedkoopste winkel op of onder de richtprijs (tgt), anders null.
+function alarmHit(it) {
+  if (!it || !(it.tgt > 0) || !it.pm) return null;
+  const best = Object.entries(it.pm).sort((a, b) => a[1] - b[1])[0];
+  return best && best[1] <= it.tgt + 0.005 ? { shop: best[0], price: best[1] } : null;
+}
+const newAlarm = (prev, hit) => !!hit && (!prev || hit.price < prev.price - 0.005);
+
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
 
 })();</script>
@@ -507,7 +593,7 @@ const FIELDS = 'code,product_name,product_name_nl,brands,quantity,nutriscore_gra
 
 const lc = (a) => (Array.isArray(a) ? a : []).map((t) => String(t).toLowerCase());
 const rank = (g) => (/^[a-e]$/.test(g) ? GRADES.indexOf(g) : 9); // onbekende score sorteert achteraan
-const allergenName = (key) => (ALLERGENS.find((a) => a.key === key) || { nl: String(key).replace(/^en:/, '') }).nl;
+const allergenName = (key) => (ALLERGENS.find((a) => a.key === key) || { nl: String(key).replace(/^[a-z]{2}:/, '').replace(/-/g, ' ') }).nl;
 
 function dietStatus(p, diet) {
   const t = lc(p && p.diet);
@@ -608,8 +694,134 @@ function sortAlternatives(items) {
     rank(a.grade) - rank(b.grade) || (a.price == null) - (b.price == null) || (a.price ?? 0) - (b.price ?? 0) || i - j).map(([x]) => x);
 }
 
-const API = { ALLERGENS, allergenName, dietStatus, allergenStatus, checkPrefs, catCandidates, betterGrades, searchUrl, normProduct, pickAlternatives, sortAlternatives };
+// Wat een product volgens Open Food Facts bevat; prefs markeert de eigen allergenen.
+function allergenSummary(p, prefs) {
+  const mine = new Set((prefs && prefs.allergens) || []);
+  const item = (key) => ({ key, name: allergenName(key).toLowerCase(), hit: mine.has(key) });
+  const contains = [...new Set(lc(p && p.alg))].map(item);
+  const traces = [...new Set(lc(p && p.traces))].filter((k) => !contains.some((c) => c.key === k)).map(item);
+  const status = contains.length || traces.length ? 'bekend' : p && p.ingDone ? 'geen' : 'onbekend';
+  const veg = dietStatus(p, 'vegetarian'), vegan = dietStatus(p, 'vegan');
+  const diet = vegan === 'ja' ? 'vegan' : veg === 'ja' ? (vegan === 'nee' ? 'vegetarisch (niet vegan)' : 'vegetarisch') : veg === 'nee' ? 'niet vegetarisch' : '';
+  return { contains, traces, status, diet };
+}
+
+const API = { ALLERGENS, allergenName, allergenSummary, dietStatus, allergenStatus, checkPrefs, catCandidates, betterGrades, searchUrl, normProduct, pickAlternatives, sortAlternatives };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Health = API;
+
+})();</script>
+<script>(function(){
+'use strict';
+// Beoordeelt de antwoorden van de testknop "Werkt alles?". Puur rekenwerk, zonder netwerk.
+const FIELDS = ['product_name', 'nutriscore_grade', 'categories_tags', 'allergens_tags', 'ingredients_analysis_tags', 'states_tags'];
+
+function checkProduct(j) {
+  const p = j && j.status === 1 && j.product;
+  if (!p) return { level: 'fail', detail: 'testproduct niet gevonden of antwoord onleesbaar' };
+  const name = p.product_name || 'product', missing = FIELDS.filter((f) => p[f] == null);
+  return missing.length
+    ? { level: 'warn', detail: `${name} gevonden, maar velden ontbreken: ${missing.join(', ')}` }
+    : { level: 'ok', detail: `${name} gevonden, alle velden aanwezig` };
+}
+
+function checkSearch(j, allowed) {
+  if (!j || !Array.isArray(j.products)) return { level: 'fail', detail: 'antwoord onleesbaar' };
+  const n = j.count != null ? j.count : j.products.length;
+  if (!j.products.length) return { level: 'warn', detail: 'geen resultaten in de testcategorie' };
+  const outside = j.products.some((p) => !allowed.includes(String(p.nutriscore_grade || '').toLowerCase()));
+  return outside
+    ? { level: 'warn', detail: `${n} producten, maar het scorefilter werd genegeerd (de app filtert dan zelf)` }
+    : { level: 'ok', detail: `${n} producten, scorefilter werkt` };
+}
+
+function httpProblem(status, msg) {
+  if (status === 429) return { level: 'warn', detail: 'limiet bereikt, probeer het over een minuut opnieuw' };
+  if (status) return { level: 'fail', detail: `server antwoordt met fout ${status}` };
+  if (msg === 'timeout') return { level: 'fail', detail: 'geen antwoord binnen 20 seconden' };
+  return { level: 'fail', detail: `niet bereikbaar (${msg || 'onbekende fout'})` };
+}
+
+function fmtBytes(n) {
+  if (n < 1024) return `${Math.round(n)} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} kB`;
+  return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function summary(results) {
+  const f = results.filter((r) => r.level === 'fail').length, w = results.filter((r) => r.level === 'warn').length;
+  if (!f && !w) return 'Alles werkt';
+  return [f ? plural(f, 'probleem', 'problemen') : '', w ? plural(w, 'waarschuwing', 'waarschuwingen') : ''].filter(Boolean).join(', ');
+}
+
+const MARK = { ok: '✓', warn: '!', fail: '✗' };
+function report(results, { version = '', ua = '', at = '' } = {}) {
+  return [`Prijsscanner test ${at} (versie ${version || 'onbekend'})`, summary(results), ...results.map((r) => `${MARK[r.level] || '?'} ${r.name}: ${r.detail}`), `Apparaat: ${ua}`].join('\n') + '\n';
+}
+
+const API = { FIELDS, checkProduct, checkSearch, httpProblem, fmtBytes, summary, report };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Diag = API;
+
+})();</script>
+<script>(function(){
+'use strict';
+// Back-up van alles wat de gebruiker zelf heeft ingevoerd (lijstjes, eigen prijzen, winkels, namen, voorkeuren).
+// Geen caches. Bij terugzetten wordt elk onderdeel op vorm gecontroleerd; wat niet klopt wordt overgeslagen.
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isStr = (v) => typeof v === 'string';
+const CHECK = {
+  lists: (v) => isObj(v) && Object.values(v).every((a) => Array.isArray(a) && a.every((x) => isObj(x) && isStr(x.name))),
+  listShop: isStr, lastShop: isStr,
+  customShops: (v) => Array.isArray(v) && v.every(isStr),
+  names: (v) => isObj(v) && Object.values(v).every(isStr),
+  prefs: isObj,
+  basketAll: (v) => typeof v === 'boolean', autoRefresh: (v) => typeof v === 'boolean',
+  hist: (v) => Array.isArray(v) && v.every((x) => isObj(x) && isStr(x.code)),
+};
+const MINE = (v) => Array.isArray(v) && v.every((x) => isObj(x) && isStr(x.shop) && typeof x.price === 'number' && x.price > 0);
+const checker = (k) => (k.startsWith('mine:') ? MINE : CHECK[k]);
+const allowed = (k) => !!checker(k);
+
+function keysOf(st) { const out = []; for (let i = 0; i < st.length; i++) { const k = st.key(i); if (k != null) out.push(k); } return out; }
+
+function exportData(st, now) {
+  const data = {};
+  for (const k of keysOf(st)) {
+    if (!allowed(k)) continue;
+    try { data[k] = JSON.parse(st.getItem(k)); } catch (e) { /* kapotte waarde overslaan */ }
+  }
+  return { app: 'prijsscanner', version: 1, at: new Date(now).toISOString(), data };
+}
+
+function parseBackup(text) {
+  let j;
+  try { j = JSON.parse(text); } catch (e) { return { ok: false, error: 'Dit bestand is geen geldige back-up (geen JSON).' }; }
+  if (!isObj(j) || j.app !== 'prijsscanner' || !isObj(j.data)) return { ok: false, error: 'Dit bestand is geen back-up van Prijsscanner.' };
+  if (j.version !== 1) return { ok: false, error: 'Deze back-up komt van een nieuwere versie van de app. Werk de app eerst bij.' };
+  const data = {}, skipped = [];
+  for (const [k, v] of Object.entries(j.data)) {
+    const c = checker(k);
+    if (c && c(v)) data[k] = v; else skipped.push(k);
+  }
+  if (!Object.keys(data).length) return { ok: false, error: 'Deze back-up is leeg of onleesbaar.' };
+  const L = data.lists || {};
+  const summary = {
+    lists: Object.keys(L).length, items: Object.values(L).reduce((n, a) => n + a.length, 0),
+    prices: Object.keys(data).filter((k) => k.startsWith('mine:')).length, shops: (data.customShops || []).length,
+    prefs: !!data.prefs, at: isStr(j.at) ? j.at : '',
+  };
+  return { ok: true, data, skipped, summary };
+}
+
+function applyBackup(st, data) {
+  for (const k of keysOf(st)) if (allowed(k)) st.removeItem(k);
+  for (const [k, v] of Object.entries(data)) if (allowed(k)) st.setItem(k, JSON.stringify(v));
+}
+
+const fileName = (now) => `prijsscanner-backup-${new Date(now).toISOString().slice(0, 10)}.json`;
+
+const API = { exportData, parseBackup, applyBackup, fileName };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Backup = API;
 
 })();</script>
 <script>
@@ -731,7 +943,9 @@ async function fetchCjb(){ // supermarktprijzen (Checkjebon), 12 uur bewaard op 
   let raw=null,err,from=0;
   try{const c=await caches.open("cjb"),hit=await c.match("/cjb-data");if(hit&&Date.now()-store.get("cjbTs",0)<CJB_TTL){raw=await hit.json();from=store.get("cjbTs",0)}}catch(e){}
   if(!raw)for(const u of CJB_URLS){
-    try{const r=await fetch(u);if(!r.ok)throw new Error("HTTP "+r.status);const copy=r.clone();raw=await r.json();
+    try{const t0=Date.now(),r=await fetch(u);if(!r.ok)throw new Error("HTTP "+r.status);const copy=r.clone(),txt=await r.text();raw=JSON.parse(txt);
+      let net=0;try{const e=performance.getEntriesByName(u);net=e.length?e[e.length-1].transferSize||0:0}catch(e){}
+      store.set("cjbStat",{size:txt.length,net,ms:Date.now()-t0,at:Date.now()});
       try{const c=await caches.open("cjb");await c.put("/cjb-data",copy);store.set("cjbTs",Date.now())}catch(e){}break}
     catch(e){err=e}
   }
@@ -836,7 +1050,7 @@ function render(){
   $("promos").innerHTML=L?chipHTML(L.promos):"";
   $("chips").innerHTML=L?chipHTML(L.shops):SHOPS.map(s=>`<a href="${s[1]}${q}" target="_blank" rel="noopener">${esc(s[0])} ↗</a>`).join("");
   $("webshops").innerHTML=L?chipHTML(L.webshops):"";
-  renderPrefBadge();renderAlt();
+  renderAllergens();renderPrefBadge();renderAlt();
 }
 
 /* ---------- Eigen prijzen & geschiedenis ---------- */
@@ -873,7 +1087,7 @@ function renderPrefsSummary(){
   const n=[prefs.vegan?"vegan":prefs.vegetarian?"vegetarisch":"",...prefs.allergens.map(k=>Health.allergenName(k).toLowerCase())].filter(Boolean);
   $("prefsSummary").textContent=n.length?`(${n.join(", ")})`:"";
 }
-function savePrefs(){store.set("prefs",prefs);renderPrefsSummary();renderPrefBadge();$("altOut").innerHTML=""}
+function savePrefs(){store.set("prefs",prefs);renderPrefsSummary();if(current){renderAllergens();renderPrefBadge()}$("altOut").innerHTML="";renderLists()}
 function initPrefs(){
   $("prefsWrap").hidden=!HEALTH;if(!HEALTH)return;
   $("prefVeg").checked=prefs.vegetarian;$("prefVegan").checked=prefs.vegan;
@@ -895,6 +1109,31 @@ function renderPrefBadge(){
   el.innerHTML=(r.verdict==="ja"?`<div class="pref ok">✓ Past bij je voorkeuren, volgens Open Food Facts.</div>`
     :r.verdict==="nee"?`<div class="pref bad">⚠ Past niet bij je voorkeuren: ${esc([...bad,...unk].join("; "))}.</div>`
     :`<div class="pref unk">? Niet zeker of het past: ${esc(unk.join("; "))}.</div>`)+`<div class="mut" style="margin-top:4px">Controleer altijd de verpakking.</div>`;
+}
+function renderAllergens(){
+  const el=$("allergens");el.innerHTML="";
+  const p=current&&current.data.product;
+  if(!HEALTH||!p||!p.name||!Array.isArray(p.alg))return;
+  const s=Health.allergenSummary(p,prefs),nm=x=>x.hit?`<b class="hit">${esc(x.name)}</b>`:esc(x.name),parts=[];
+  if(s.contains.length)parts.push(`Bevat: ${s.contains.map(nm).join(", ")}`);
+  if(s.traces.length)parts.push(`Kan sporen bevatten: ${s.traces.map(nm).join(", ")}`);
+  if(!parts.length)parts.push(s.status==="geen"?"Geen allergenen gemeld":"Allergenen onbekend: de ingrediëntenlijst is onvolledig");
+  if(s.diet)parts.push(esc(s.diet));
+  el.innerHTML=`<div class="alg">${parts.join(" · ")}</div>`+(prefsOn()?"":`<div class="mut">Volgens Open Food Facts, controleer altijd de verpakking.</div><button class="linkbtn" data-open-prefs="1">Mijn allergieën instellen</button>`);
+}
+$("allergens").addEventListener("click",e=>{if(e.target.dataset&&e.target.dataset.openPrefs){$("prefsBox").open=true;$("prefsWrap").scrollIntoView({behavior:"smooth",block:"start"})}});
+function histLine(x){
+  if(!HAS_MATCH)return "";
+  const st=Match.priceStats(x.ph);
+  const al=x.tgt?(x.hit?`<span class="okx">🔔 ${eur(x.hit.price)} bij ${esc(x.hit.shop)}, onder je richtprijs ${eur(x.tgt)}</span>`:`🔔 richtprijs ${eur(x.tgt)}`):"";
+  const t=[st?`laagste ${eur(st.min)} · hoogste ${eur(st.max)}`:"",al].filter(Boolean).join(" · ");
+  return t?`<div class="sub">${t}</div>`:"";
+}
+function listWarn(x){
+  if(!prefsOn()||!x.al)return "";
+  const r=Health.checkPrefs(x.al,prefs);
+  if(r.verdict==="nee")return ` · <span class="warnx">⚠ ${esc(r.issues.filter(i=>i.kind==="nee").map(i=>i.text).join(", "))}</span>`;
+  return r.verdict==="onbekend"?" · ? niet zeker of het past":"";
 }
 const gradeBadge=g=>`<span class="gb g-${g}" role="img" aria-label="Nutri-Score ${g.toUpperCase()}">${g.toUpperCase()}</span>`;
 const altCache=new Map();let altBusy=false,altFor=null;
@@ -946,15 +1185,104 @@ async function findAlternatives(){
     const shown=Health.sortAlternatives(items).slice(0,5),fit=prefsOn();
     out.innerHTML=`<p class="mut" style="margin:12px 0 0">${cur.grade?`Betere Nutri-Score dan ${cur.grade.toUpperCase()}`:"Producten met Nutri-Score A of B"}, gezondst eerst:</p>`
       +shown.map(it=>`<div class="alt">${it.img?`<img src="${esc(safeUrl(it.img))}" alt="" loading="lazy">`:`<div class="ph"></div>`}<div><strong>${esc(it.name)}</strong><div class="sub">${esc([it.brand,it.qty].filter(Boolean).join(" · "))}</div>${fit?`<div class="sub">✓ past bij je voorkeuren</div>`:""}</div><div class="altr">${gradeBadge(it.grade)}<div class="p">${it.price!=null?eur(it.price):"prijs onbekend"}</div>${it.price!=null?`<div class="sub">${esc(it.shop)}, online</div>`:""}<button data-alt="${esc(it.code)}">Bekijk</button></div></div>`).join("")
-      +`<p class="mut">Zelfde soort: ${esc(cat.replace(/^en:/,"").replace(/-/g," "))}. Controleer altijd de verpakking: Open Food Facts wordt door vrijwilligers ingevuld.${skip}</p>`;
+      +`<p class="mut">Uit dezelfde productcategorie bij Open Food Facts. Controleer altijd de verpakking: Open Food Facts wordt door vrijwilligers ingevuld.${skip}</p>`;
   }finally{altBusy=false;$("altBtn").disabled=false}
 }
 $("altBtn").addEventListener("click",findAlternatives);
 $("altOut").addEventListener("click",e=>{const c=e.target.dataset&&e.target.dataset.alt;if(c)lookup(c)});
 initPrefs();
 
+/* ---------- Testknop: werkt alles? ---------- */
+const DIAG=HEALTH&&typeof Diag!=="undefined",DIAG_EAN="3017620422003";
+let diagBusy=false,diagRes=[];
+const withTimeout=(p,ms=20000)=>{let t;return Promise.race([p,new Promise((_,rej)=>{t=setTimeout(()=>rej(new Error("timeout")),ms)})]).finally(()=>clearTimeout(t))};
+async function diagFetch(url){
+  let r;try{r=await withTimeout(fetch(url))}catch(e){return {problem:Diag.httpProblem(0,e.message)}}
+  if(!r.ok)return {problem:Diag.httpProblem(r.status)};
+  try{return {json:await r.json()}}catch(e){return {problem:{level:"fail",detail:"antwoord onleesbaar"}}}
+}
+const MK={ok:"✓",warn:"!",fail:"✗"};
+function diagRender(){$("diagOut").innerHTML=diagRes.map(r=>`<li class="d-${r.level}"><span class="mk">${MK[r.level]}</span> <strong>${esc(r.name)}</strong> <span class="sub">${esc(r.detail)}</span></li>`).join("")}
+async function runDiag(){
+  if(diagBusy||!DIAG)return;
+  diagBusy=true;$("diagBtn").disabled=true;$("diagCopy").hidden=true;diagRes=[];diagRender();$("diagSum").textContent="Bezig met testen…";
+  const add=(name,r)=>{diagRes.push({name,...r});diagRender()};
+  try{
+    add("Beveiligde verbinding",location.protocol==="https:"?{level:"ok",detail:"https"}:{level:"fail",detail:"geen https: de camera werkt alleen via https"});
+    let st=false;try{localStorage.setItem("__t","1");st=localStorage.getItem("__t")==="1";localStorage.removeItem("__t")}catch(e){}
+    add("Opslag op dit apparaat",st?{level:"ok",detail:"lijstjes en voorkeuren worden bewaard"}:{level:"fail",detail:"niet beschikbaar (privévenster?), lijstjes worden niet bewaard"});
+    add("Camera",navigator.mediaDevices&&navigator.mediaDevices.getUserMedia?{level:"ok",detail:"beschikbaar, toestemming wordt gevraagd bij starten"}:{level:"fail",detail:"niet beschikbaar; gebruik 'Foto kiezen' of typ de barcode"});
+    if("BarcodeDetector" in window)add("Barcodelezer",{level:"ok",detail:"ingebouwd in de browser"});
+    else try{await withTimeout(loadZXing());add("Barcodelezer",{level:"ok",detail:"ZXing geladen"})}
+      catch(e){add("Barcodelezer",{level:"fail",detail:e.message==="timeout"?"ZXing laadt niet binnen 20 seconden":"ZXing kon niet laden van unpkg.com"})}
+    let x=await diagFetch(`https://world.openfoodfacts.org/api/v2/product/${DIAG_EAN}.json?fields=${Diag.FIELDS.join(",")}`);
+    add("Open Food Facts product",x.problem||Diag.checkProduct(x.json));
+    const allowed=["a","b"];
+    x=await diagFetch(Health.searchUrl("en:breakfast-cereals",allowed));
+    add("Open Food Facts zoeken",x.problem||Diag.checkSearch(x.json,allowed));
+    x=await diagFetch(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${DIAG_EAN}&size=1`);
+    add("Open Prices",x.problem||(x.json&&Array.isArray(x.json.items)?{level:"ok",detail:`bereikbaar, ${pl(x.json.total!=null?x.json.total:x.json.items.length,"prijs","prijzen")} voor het testproduct`}:{level:"fail",detail:"antwoord onleesbaar"}));
+    try{
+      const ch=await withTimeout(loadCjb(),60000),n=ch.reduce((a,c)=>a+c.items.length,0);
+      const m=Match.findMatches(ch,Match.buildQuery({q:"halfvolle melk 1 l"})),s=store.get("cjbStat",null);
+      const dl=s?` · laatste download ${s.net?Diag.fmtBytes(s.net)+" via het netwerk, uitgepakt "+Diag.fmtBytes(s.size):"ongeveer "+Diag.fmtBytes(s.size)} in ${(s.ms/1000).toFixed(1).replace(".",",")} s`:"";
+      add("Supermarktprijzen",{level:m.length?"ok":"warn",detail:`${ch.length} winkels, ${n} producten, bijgewerkt ${new Date(store.get("cjbTs",Date.now())).toLocaleDateString("nl-NL")} · testkoppeling: melk bij ${m.length} winkels${dl}`});
+    }catch(e){add("Supermarktprijzen",e.message==="timeout"?{level:"fail",detail:"geen antwoord binnen 60 seconden"}:Diag.httpProblem(0,e.message))}
+  }finally{
+    diagBusy=false;$("diagBtn").disabled=false;
+    $("diagSum").innerHTML=`<strong>${esc(Diag.summary(diagRes))}</strong>`;$("diagCopy").hidden=false;
+  }
+}
+$("appVersion").textContent=window.APP_VERSION||"ontwikkelversie";
+$("diagCard").hidden=!DIAG;$("diagCopy").hidden=true;
+$("diagBtn").addEventListener("click",runDiag);
+$("diagCopy").addEventListener("click",async()=>{
+  const t=Diag.report(diagRes,{version:window.APP_VERSION||"ontwikkelversie",ua:navigator.userAgent||"",at:new Date().toLocaleString("nl-NL")});
+  try{await navigator.clipboard.writeText(t);toast("Gekopieerd. Plak het in een bericht.")}catch(e){toast("Kopiëren lukt niet op dit apparaat")}
+});
+
+/* ---------- Back-up ---------- */
+const BACKUP=typeof Backup!=="undefined";
+let bkPending=null;
+$("backupCard").hidden=!BACKUP;$("bkConfirm").hidden=true;
+$("bkExport").addEventListener("click",async()=>{
+  if(!BACKUP)return;
+  const now=Date.now(),text=JSON.stringify(Backup.exportData(localStorage,now),null,1),name=Backup.fileName(now);
+  try{
+    if(typeof File!=="undefined"&&navigator.canShare){
+      const f=new File([text],name,{type:"application/json"});
+      if(navigator.canShare({files:[f]})){await navigator.share({files:[f],title:"Prijsscanner back-up"});toast("Back-up gemaakt");return}
+    }
+  }catch(e){if(e&&e.name==="AbortError")return}
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  toast("Back-up gemaakt: "+name);
+});
+const pl=(n,one,many)=>`${n} ${n===1?one:many}`;
+$("bkFile").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0];e.target.value="";if(!f||!BACKUP)return;
+  $("bkConfirm").hidden=true;bkPending=null;
+  let r;try{r=Backup.parseBackup(await f.text())}catch(err){r={ok:false,error:"Het bestand kon niet gelezen worden."}}
+  if(!r.ok){$("bkMsg").textContent=r.error;return}
+  const s=r.summary,parts=[];
+  if(s.lists)parts.push(`${pl(s.lists,"lijstje","lijstjes")} met ${pl(s.items,"product","producten")}`);
+  if(s.prices)parts.push(pl(s.prices,"eigen prijs","eigen prijzen"));
+  if(s.shops)parts.push(pl(s.shops,"eigen winkel","eigen winkels"));
+  if(s.prefs)parts.push("je voorkeuren");
+  if(!parts.length)parts.push("opgeslagen gegevens");
+  const skip=r.skipped.length?` ${r.skipped.length===1?"1 onderdeel kon":r.skipped.length+" onderdelen konden"} niet gelezen worden en ${r.skipped.length===1?"wordt":"worden"} overgeslagen.`:"";
+  bkPending=r.data;$("bkMsg").textContent="";
+  $("bkSum").textContent=`Back-up${s.at?" van "+new Date(s.at).toLocaleDateString("nl-NL"):""}: ${parts.join(", ")}.${skip} Dit vervangt wat nu op dit apparaat staat.`;
+  $("bkConfirm").hidden=false;
+});
+$("bkYes").addEventListener("click",()=>{if(!bkPending)return;Backup.applyBackup(localStorage,bkPending);bkPending=null;location.reload()});
+$("bkNo").addEventListener("click",()=>{bkPending=null;$("bkConfirm").hidden=true});
+
 /* ---------- Boodschappenlijstjes per winkel ---------- */
-let lists=store.get("lists",{}),listShop=store.get("listShop","");
+let lists=store.get("lists",{}),listShop=store.get("listShop",""),alarmEdit=null;
+const HAS_MATCH=typeof Match!=="undefined";
+const parseEur=t=>{const v=parseFloat(String(t||"").replace(/[€\s]/g,"").replace(",","."));return v>0?Math.round(v*100)/100:null};
+const alarmText=a=>`🔔 Richtprijs gehaald: ${a.name} ${eur(a.price)} bij ${a.shop}`;
 const saveLists=()=>store.set("lists",lists);
 let toastT=0;
 function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{el.hidden=true},2200)}
@@ -969,8 +1297,9 @@ function addToList(row){
   const ex=arr.find(x=>(current.code&&x.ean===current.code)||(!x.ean&&x.name.toLowerCase()===name.toLowerCase()));
   const pm={};for(const x of eurs){if(pm[x.shop]==null||x.price<pm[x.shop])pm[x.shop]=x.price}
   const q=!current.code&&d.query?d.query:"",mq=current.code&&p.name?{name:p.name,brand:p.brand||"",qty:p.qty||""}:null;
-  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm;ex.upd=Date.now();ex.gone=false;delete ex.chg;if(q&&!ex.q)ex.q=q;if(mq)ex.mq=mq}
-  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm,upd:Date.now(),...(q?{q}:{}),...(mq?{mq}:{})});
+  const al=Array.isArray(p.alg)?{diet:p.diet||[],alg:p.alg,traces:p.traces||[],ingDone:!!p.ingDone}:null;
+  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm;ex.upd=Date.now();ex.gone=false;delete ex.chg;if(q&&!ex.q)ex.q=q;if(mq)ex.mq=mq;if(al)ex.al=al;if(HAS_MATCH)ex.ph=Match.recordPrice(ex.ph,Date.now(),ex.price)}
+  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm,upd:Date.now(),...(q?{q}:{}),...(mq?{mq}:{}),...(al?{al}:{}),...(HAS_MATCH&&price!=null?{ph:Match.recordPrice(null,Date.now(),price)}:{})});
   listShop=shop;store.set("listShop",listShop);saveLists();renderLists();
   toast(`Op het lijstje van ${shop}`);
 }
@@ -1006,7 +1335,7 @@ function renderLists(){
   $("listShop").value=listShop;
   $("shopDel").hidden=!customShops.includes(listShop);
   const arr=lists[listShop]||[];
-  $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${typeof Match!=="undefined"&&Match.recentChange(x,Date.now())?` · ${x.price<x.chg.from?"▼":"▲"} was ${eur(x.chg.from)}`:""}${x.gone?" · prijs niet meer gevonden bij deze winkel":""}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button></div></div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
+  $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${typeof Match!=="undefined"&&Match.recentChange(x,Date.now())?` · ${x.price<x.chg.from?"▼":"▲"} was ${eur(x.chg.from)}`:""}${x.gone?" · prijs niet meer gevonden bij deze winkel":""}${listWarn(x)}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button>${HAS_MATCH&&Match.refreshable(x)?` <button class="del" data-act="alarm" data-id="${esc(x.id)}" aria-label="Prijsalarm voor ${esc(x.name)}">🔔</button>`:""}</div>${histLine(x)}${alarmEdit===x.id?`<div class="row" style="margin:6px 0 0"><input id="alarmVal" inputmode="decimal" placeholder="Richtprijs, bv. 2,49" aria-label="Richtprijs in euro" value="${x.tgt?esc(String(x.tgt).replace(".",",")):""}" style="flex:1;min-width:120px"><button data-act="alarmSave" data-id="${esc(x.id)}">Opslaan</button>${x.tgt?`<button data-act="alarmOff" data-id="${esc(x.id)}">Alarm uit</button>`:""}</div>`:""}</div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
     :`<p class="mut" style="margin:6px 0">Nog niets op het lijstje van ${esc(listShop)}. Voeg hierboven iets toe, of kies bij een scan "Op lijstje".</p>`;
   const todo=arr.filter(x=>!x.done),unknown=todo.filter(x=>x.price==null).length;
   $("listTotal").innerHTML=arr.length?`<span>Nog te kopen</span><span>${eur(lineSum(arr))}</span>`:"";
@@ -1039,7 +1368,7 @@ async function refreshPrices(manual){
     const jb=jobs.get(k);jb.refs.push([shop,it]);if(!jb.mq&&it.mq)jb.mq=it.mq;
   }
   const todo=[...jobs.values()];if(!todo.length)return;
-  refreshing=true;let changed=0,failed=0,done=0;refreshUI(true,0,todo.length);
+  refreshing=true;let changed=0,failed=0,done=0;const alarms=[];refreshUI(true,0,todo.length);
   const now=Date.now();
   const run=async job=>{
     try{
@@ -1050,7 +1379,7 @@ async function refreshPrices(manual){
       const pm=Match.minByShop([...(d.prices||[]),...mine]);
       if(!Object.keys(pm).length)throw new Error("geen prijzen gevonden");
       const mqNew=job.ean&&d.product&&d.product.name?{name:d.product.name,brand:d.product.brand||"",qty:d.product.qty||""}:null;
-      for(const [shop,it] of job.refs){const n=Match.applyFresh(it,pm,shop,now);if(it.price!=null&&n.price!==it.price)changed++;Object.assign(it,n);if(!it.mq&&mqNew)it.mq=mqNew}
+      for(const [shop,it] of job.refs){const n=Match.applyFresh(it,pm,shop,now);if(it.price!=null&&n.price!==it.price)changed++;Object.assign(it,n);it.ph=Match.recordPrice(it.ph,now,it.price);const hit=Match.alarmHit(it);if(Match.newAlarm(it.hit,hit))alarms.push({name:it.name,...hit});it.hit=hit;if(!it.mq&&mqNew)it.mq=mqNew;if(!it.al&&d.product&&Array.isArray(d.product.alg))it.al={diet:d.product.diet||[],alg:d.product.alg,traces:d.product.traces||[],ingDone:!!d.product.ingDone}}
     }catch(e){failed++}
     refreshUI(true,++done,todo.length);
   };
@@ -1058,10 +1387,11 @@ async function refreshPrices(manual){
     let i=0;
     await Promise.all(Array.from({length:Math.min(3,todo.length)},async()=>{while(i<todo.length)await run(todo[i++])}));
   }finally{refreshing=false;saveLists();refreshUI(false);renderLists()}
-  if(manual||changed){
-    const a=changed?`${changed} ${changed===1?"prijs":"prijzen"} gewijzigd`:failed?"":"Prijzen zijn actueel";
+  if(manual||changed||alarms.length){
+    const al=alarms.length===1?alarmText(alarms[0]):alarms.length?`🔔 ${alarms.length} producten onder je richtprijs`:"";
+    const a=changed?`${changed} ${changed===1?"prijs":"prijzen"} gewijzigd`:failed||alarms.length?"":"Prijzen zijn actueel";
     const b=failed?`${failed} ${failed===1?"product":"producten"} niet gelukt, oude prijs blijft staan`:"";
-    toast([a,b].filter(Boolean).join(", "));
+    toast([al,a,b].filter(Boolean).join(". "));
   }
 }
 function autoRefresh(){
@@ -1101,7 +1431,15 @@ $("listAdd").addEventListener("submit",e=>{
 $("listItems").addEventListener("click",e=>{
   const act=e.target.dataset?.act,id=e.target.dataset?.id;if(!act)return;
   const arr=lists[listShop]||[],it=arr.find(x=>x.id===id);if(!it)return;
-  if(act==="done")it.done=!it.done;
+  if(act==="alarm"){alarmEdit=alarmEdit===id?null:id;renderLists();return}
+  if(act==="alarmSave"){
+    const v=parseEur($("alarmVal").value);
+    if(v==null){toast("Vul een geldige prijs in, bijvoorbeeld 2,49");return}
+    it.tgt=v;alarmEdit=null;it.hit=Match.alarmHit(it);
+    if(it.hit)toast(alarmText({name:it.name,...it.hit}));else toast(`Prijsalarm gezet op ${eur(v)}`);
+  }
+  else if(act==="alarmOff"){delete it.tgt;delete it.hit;alarmEdit=null;toast("Prijsalarm uit")}
+  else if(act==="done")it.done=!it.done;
   else if(act==="inc")it.qty++;
   else if(act==="dec")it.qty=Math.max(1,it.qty-1);
   else if(act==="rm")lists[listShop]=arr.filter(x=>x.id!==id);
