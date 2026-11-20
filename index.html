@@ -73,7 +73,9 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 #prefsSummary{margin-left:6px;font-weight:400}
 .alg{margin-top:10px;font-size:15px}.alg .hit{color:var(--red);font-weight:800}
 .linkbtn{background:none;border:0;padding:0 4px;min-height:44px;display:inline-flex;align-items:center;text-decoration:underline;color:inherit;font:inherit;cursor:pointer}
-.warnx{color:var(--red);font-weight:700}.trend{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.spark{flex:none}.okx{color:#038141;font-weight:700}
+.warnx{color:var(--red);font-weight:700}.oldr{padding:8px 0;border-bottom:1px solid var(--line)}.oldr:last-child{border:0}.oldr .pp{font-weight:700;margin-top:2px}
+.hpanel{margin:6px 0 2px;padding:6px 10px;border-left:3px solid var(--line)}
+.trend{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.spark{flex:none}.okx{color:#038141;font-weight:700}
 .pref{margin-top:10px;padding:9px 12px;border-radius:10px;font-size:15px;font-weight:600}
 .pref.ok{background:rgba(3,129,65,.14)}.pref.bad{background:rgba(230,62,17,.14)}.pref.unk{background:rgba(120,120,120,.16)}
 .pl{display:flex;align-items:center;gap:8px;min-height:44px}.pl input{width:22px;min-height:22px}
@@ -160,7 +162,9 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
   </form>
 
   <h2>Prijzen per winkel</h2>
-  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p></div>
+  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p>
+    <div id="oldWrap" hidden><div class="row" style="align-items:center"><button id="oldBtn" type="button">Prijzen van een maand geleden</button><span class="mut">eenmalig ongeveer 2 MB</span></div><div id="oldOut" aria-live="polite"></div></div>
+  </div>
 
   <h2>Prijs toevoegen</h2>
   <form class="add card" id="addForm">
@@ -223,6 +227,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
           <li>bij scannen en verversen: de barcode of productnaam naar Open Food Facts en Open Prices;</li>
           <li>bij zoeken op naam: je zoekwoorden naar Open Food Facts (search.openfoodfacts.org), maar pas als je op Zoek drukt. Wat je tijdens het typen ziet, wordt op je telefoon gezocht;</li>
           <li>bij "Gezondere keuzes": de productcategorie naar Open Food Facts;</li>
+          <li>bij "Prijzen van een maand geleden": een vraag aan GitHub (api.github.com) welke versie van de supermarktprijzen bij die datum hoort, en die versie via jsDelivr of GitHub;</li>
           <li>de supermarktprijzen: één bestand van Checkjebon, gedownload via jsDelivr of GitHub;</li>
           <li>de barcodelezer ZXing van unpkg.com, alleen als je browser zelf geen barcodes kan lezen;</li>
           <li>productfoto's van Open Food Facts.</li>
@@ -294,7 +299,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-59b132c";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-bb4257e";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -396,6 +401,16 @@ function unitPrice(price, size) {
 }
 
 // Beste match per keten. chains: [{key, items:[prepared]}]
+// Zoals findMatches, maar op het ruwe bestand: alleen producten waarin een zoekwoord voorkomt worden voorbereid
+// (scheelt veel geheugen bij een tweede, oude versie van de supermarktdata).
+function findMatchesRaw(raw, q, opts) {
+  const toks = [...q.tokens];
+  const chains = (raw || []).filter((c) => c && Array.isArray(c.d)).map((c) => ({
+    key: String(c.n), items: c.d.filter((it) => it && it.n && toks.some((t) => norm(it.n).includes(t))).map(prepareItem).filter(Boolean),
+  }));
+  return findMatches(chains, q, opts);
+}
+
 function findMatches(chains, q, { min = 0.6, high = 0.85 } = {}) {
   if (!q.tokens.size) return [];
   const out = [];
@@ -537,7 +552,7 @@ function sparkPath(ph, now, w, h, pad) {
   return { d: d + `H${X(t1)}`, cx: X(t1), cy: Y(ph[ph.length - 1][1]) };
 }
 
-const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm, priceTrend, sparkPath };
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm, priceTrend, sparkPath, findMatchesRaw };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
 
 })();</script>
@@ -965,6 +980,39 @@ const API = { buildIndex, searchLocal, offUrls, parseOff, rankForPrefs };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Search = API;
 
 })();</script>
+<script>(function(){
+'use strict';
+// Supermarktprijzen van een maand geleden: Checkjebon bewaart elke dagelijkse versie van het bestand op GitHub.
+// Alleen op verzoek van de gebruiker: één vraag aan GitHub (welke versie hoort bij die datum) en één download (~2 MB).
+const REPO = 'supermarkt/checkjebon', FILE = 'data/supermarkets.json', DAY = 24 * 3600e3;
+const commitsUrl = (untilMs) => `https://api.github.com/repos/${REPO}/commits?` + new URLSearchParams({ path: FILE, until: new Date(untilMs).toISOString(), per_page: '1' });
+function pickCommit(json) {
+  const c = Array.isArray(json) ? json[0] : null;
+  const date = c && c.commit && ((c.commit.committer && c.commit.committer.date) || (c.commit.author && c.commit.author.date));
+  return c && c.sha && date ? { sha: String(c.sha), date: Date.parse(date) } : null;
+}
+const snapshotUrls = (sha) => [`https://cdn.jsdelivr.net/gh/${REPO}@${sha}/${FILE}`, `https://raw.githubusercontent.com/${REPO}/${sha}/${FILE}`];
+// Een eerder opgehaalde versie blijft bruikbaar zolang hij ongeveer een maand oud is.
+const snapshotFresh = (meta, now) => !!(meta && meta.sha && meta.date && now - meta.date >= 25 * DAY && now - meta.date <= 37 * DAY);
+const r2 = (n) => Math.round(n * 100) / 100;
+// Per winkel de prijs toen en nu. Werd toen een ander product gevonden dan nu, dan geen verschil (geen appels met peren).
+const same = (a, b) => String(a || '').toLowerCase().replace(/\s+/g, ' ').trim() === String(b || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function compareThenNow(thenMatches, nowMatches) {
+  const t = new Map((thenMatches || []).map((m) => [m.chain, m])), n = new Map((nowMatches || []).map((m) => [m.chain, m]));
+  const rows = [...new Set([...n.keys(), ...t.keys()])].map((chain) => {
+    const a = t.get(chain), b = n.get(chain), shown = b || a, other = !!(a && b && !same(a.name, b.name));
+    return {
+      chain, then: a ? a.price : null, now: b ? b.price : null, diff: a && b && !other ? r2(b.price - a.price) : null,
+      name: shown.name, size: shown.size, sure: (!a || a.confidence === 'hoog') && (!b || b.confidence === 'hoog'), other,
+    };
+  });
+  const rank = (r) => (r.then != null && r.now != null ? 0 : r.now != null ? 1 : 2);
+  return rows.sort((x, y) => rank(x) - rank(y) || (x.now ?? x.then) - (y.now ?? y.then));
+}
+const API = { commitsUrl, pickCommit, snapshotUrls, snapshotFresh, compareThenNow };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.History = API;
+
+})();</script>
 <script>
 {
 const SHOPS=[
@@ -1122,7 +1170,7 @@ async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} =
     sources.checkjebon={status:"ok",producten:chains.reduce((n,c)=>n+c.items.length,0),gevonden:m.length,bijgewerkt:new Date(store.get("cjbTs",Date.now())).toISOString().slice(0,10)};
   }catch(e){sources.checkjebon={status:"niet bereikbaar",fout:String(e.message||e)}}
   const text=q.text||code;
-  return {ean:code,product,query:text,prices,links:Shops.links(text),sources};
+  return {ean:code,product,query:text,prices,links:Shops.links(text),sources,qa:{name:product?.name,brand:product?.brand,qty:product?.qty,q:qText}};
 }
 async function fetchData(code,q,strict,known){ // opzoeken zonder iets te tekenen (ook voor verversen)
   try{
@@ -1191,7 +1239,7 @@ function render(){
   $("promos").innerHTML=L?chipHTML(L.promos):"";
   $("chips").innerHTML=L?chipHTML(L.shops):SHOPS.map(s=>`<a href="${s[1]}${q}" target="_blank" rel="noopener">${esc(s[0])} ↗</a>`).join("");
   $("webshops").innerHTML=L?chipHTML(L.webshops):"";
-  renderAllergens();renderPrefBadge();renderAlt();
+  renderAllergens();renderPrefBadge();renderAlt();renderOldWrap();
 }
 
 /* ---------- Eigen prijzen & geschiedenis ---------- */
@@ -1265,20 +1313,24 @@ function renderAllergens(){
   el.innerHTML=`<div class="alg">${parts.join(" · ")}</div>`+(prefsOn()?"":`<div class="mut">Volgens Open Food Facts, controleer altijd de verpakking.</div><button class="linkbtn" data-open-prefs="1">Mijn allergieën instellen</button>`);
 }
 $("allergens").addEventListener("click",e=>{if(e.target.dataset&&e.target.dataset.openPrefs){$("prefsBox").open=true;$("prefsWrap").scrollIntoView({behavior:"smooth",block:"start"})}});
+const diffHTML=d=>d==null?"":d===0?" (gelijk)":` (<span class="${d<0?"okx":"warnx"}">${d<0?"▼":"▲"} ${eur(Math.abs(d))}</span>)`;
 const fmtDay=t=>new Date(t).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
 // Prijsverloop: sparklijn (rustige lijn, laatste punt in nadrukkleur) en de prijs van een maand geleden of sinds toevoegen.
 function trendLine(x){
   const now=Date.now(),tr=Match.priceTrend(x.ph,now);if(!tr)return "";
   const sp=Match.sparkPath(x.ph,now,76,22,5),lab="Prijsverloop: "+x.ph.map(([t,p])=>`${eur(p)} op ${fmtDay(t)}`).join(", ");
-  const d=tr.diff?` (<span class="${tr.diff<0?"okx":"warnx"}">${tr.diff<0?"▼":"▲"} ${eur(Math.abs(tr.diff))}</span>)`:" (gelijk)";
+  const d=diffHTML(tr.diff);
   return `<div class="sub trend"><svg class="spark" viewBox="0 0 76 22" width="76" height="22" role="img" aria-label="${esc(lab)}"><path d="${sp.d}" fill="none" stroke="var(--mut)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${sp.cx}" cy="${sp.cy}" r="4" fill="var(--ink)"/></svg><span>${tr.month?"een maand geleden":"sinds "+fmtDay(tr.refT)} ${eur(tr.ref)}, nu ${eur(tr.now)}${d}</span></div>`;
 }
+// Altijd zichtbaar: alleen het prijsalarm (zelf ingesteld). Het prijsverloop staat in een paneel dat je zelf opent.
 function histLine(x){
-  if(!HAS_MATCH)return "";
+  if(!HAS_MATCH||!x.tgt)return "";
+  return `<div class="sub">${x.hit?`<span class="okx">🔔 ${eur(x.hit.price)} bij ${esc(x.hit.shop)}, onder je richtprijs ${eur(x.tgt)}</span>`:`🔔 richtprijs ${eur(x.tgt)}`}</div>`;
+}
+const histOpen=new Set();
+function histPanel(x){
   const st=Match.priceStats(x.ph);
-  const al=x.tgt?(x.hit?`<span class="okx">🔔 ${eur(x.hit.price)} bij ${esc(x.hit.shop)}, onder je richtprijs ${eur(x.tgt)}</span>`:`🔔 richtprijs ${eur(x.tgt)}`):"";
-  const t=[st?`laagste ${eur(st.min)} · hoogste ${eur(st.max)}`:"",al].filter(Boolean).join(" · ");
-  return trendLine(x)+(t?`<div class="sub">${t}</div>`:"");
+  return `<div class="hpanel">${trendLine(x)||`<div class="sub">Nog geen prijswijziging sinds je dit product toevoegde.</div>`}${st?`<div class="sub">laagste ${eur(st.min)} · hoogste ${eur(st.max)}</div>`:""}${oldLine(x)}</div>`;
 }
 // Wat een lijstje nodig heeft om te waarschuwen (klein gehouden: geen volledige ingrediëntenlijst).
 const alOf=p=>p&&Array.isArray(p.alg)?{diet:p.diet||[],alg:p.alg,traces:p.traces||[],ingDone:!!p.ingDone,halalLab:!!p.halalLab,halalBad:p.halalBad||[],gelatin:!!p.gelatin}:null;
@@ -1455,6 +1507,73 @@ async function fullSearch(q){
   $("searchOut").innerHTML=head+body+cmp;
 }
 
+/* ---------- Prijzen van een maand geleden (alleen op verzoek) ---------- */
+const HIST=typeof History!=="undefined"&&typeof Match!=="undefined";
+let oldSnap=null,oldP=null,oldLoading=false,oldErr="",oldFor=null;const oldItemCache=new Map();
+async function fetchOldSnapshot(){
+  const now=Date.now();let meta=store.get("cjbOld",null),raw=null;
+  if(History.snapshotFresh(meta,now)){try{const c=await caches.open("cjb-old"),hit=await c.match("/cjb-old");if(hit)raw=await hit.json()}catch(e){}}
+  else meta=null;
+  if(!meta){
+    const r=await withTimeout(fetch(History.commitsUrl(now-30*864e5)));
+    if(!r.ok){const e=new Error("HTTP "+r.status);e.rate=r.status===403||r.status===429;throw e}
+    meta=History.pickCommit(await r.json());if(!meta)throw new Error("geen versie gevonden");
+  }
+  if(!raw){
+    let err;
+    for(const u of History.snapshotUrls(meta.sha)){
+      try{const r=await withTimeout(fetch(u),60000);if(!r.ok)throw new Error("HTTP "+r.status);const copy=r.clone();raw=await r.json();
+        try{const c=await caches.open("cjb-old");await c.put("/cjb-old",copy)}catch(e){}break}
+      catch(e){err=e}
+    }
+    if(!raw)throw err||new Error("download mislukt");
+  }
+  store.set("cjbOld",{sha:meta.sha,date:meta.date});
+  return {raw,date:meta.date};
+}
+function loadOld(){
+  if(oldSnap)return Promise.resolve(oldSnap);
+  if(!oldP)oldP=fetchOldSnapshot().then(s=>{oldSnap=s;oldItemCache.clear();return s}).finally(()=>{oldP=null});
+  return oldP;
+}
+const oldMsg=e=>e&&e.rate?"GitHub staat een beperkt aantal opvragingen per uur toe. Probeer het later opnieuw.":"Ophalen lukt nu niet. Probeer het later opnieuw.";
+function renderOldWrap(){
+  if(oldFor!==current){$("oldOut").innerHTML="";oldFor=current}
+  $("oldWrap").hidden=!(HIST&&current&&current.data.qa&&(current.data.qa.name||current.data.qa.q));
+}
+async function showOld(){
+  const mine=current;if(!mine||!HIST)return;
+  $("oldBtn").disabled=true;$("oldOut").innerHTML=`<p class="mut">Ophalen…</p>`;
+  try{
+    const s=await loadOld();if(current!==mine)return;
+    const q=Match.buildQuery(mine.data.qa);let nowM=[];
+    try{nowM=Match.findMatches(await loadCjb(),q)}catch(e){}
+    if(current!==mine)return;
+    const rows=History.compareThenNow(Match.findMatchesRaw(s.raw,q),nowM);
+    $("oldOut").innerHTML=rows.length?`<p class="mut" style="margin:10px 0 2px">Supermarktprijzen op ${fmtDay(s.date)} en nu:</p>`+rows.map(r=>`<div class="oldr"><div><strong>${esc(Shops.chainInfo(r.chain).name)}</strong> <span class="mut">${esc(r.name)}${r.size?` (${esc(r.size)})`:""}</span>${r.sure?"":' <span class="src warn">controleer variant</span>'}${r.other?' <span class="mut">· toen een ander product</span>':""}</div><div class="pp">${r.then!=null?eur(r.then):"niet gevonden"} → ${r.now!=null?"nu "+eur(r.now):"nu niet gevonden"}${diffHTML(r.diff)}</div></div>`).join("")
+      :`<p class="mut">Geen supermarktprijzen gevonden op ${fmtDay(s.date)}.</p>`;
+  }catch(e){if(current===mine)$("oldOut").innerHTML=`<p class="mut">${oldMsg(e)}</p>`}
+  finally{$("oldBtn").disabled=false}
+}
+$("oldBtn").addEventListener("click",showOld);
+// Voor een product op het lijstje: de prijs bij die winkel een maand geleden.
+function oldLine(x){
+  if(!HIST)return "";
+  if(!oldSnap){
+    if(oldLoading)return `<div class="sub">Prijzen van een maand geleden ophalen…</div>`;
+    return `<div class="sub"><button class="del" data-act="old" data-id="${esc(x.id)}">Prijs van een maand geleden</button> eenmalig ongeveer 2 MB${oldErr?` · ${esc(oldErr)}`:""}</div>`;
+  }
+  const key=x.id+"|"+listShop+"|"+oldSnap.date;
+  if(!oldItemCache.has(key)){
+    const q=Match.buildQuery(x.mq?x.mq:x.q?{q:x.q}:{name:x.name});
+    const m=Match.findMatchesRaw(oldSnap.raw,q).find(mm=>Shops.chainInfo(mm.chain).name===listShop);
+    oldItemCache.set(key,m||null);
+  }
+  const m=oldItemCache.get(key),then=m?m.price:null,now=x.price;
+  if(then==null)return `<div class="sub">Niet gevonden bij ${esc(listShop)} in de supermarktprijzen van ${fmtDay(oldSnap.date)}.</div>`;
+  return `<div class="sub">${fmtDay(oldSnap.date)} bij ${esc(listShop)}: ${eur(then)}${now!=null?`, nu ${eur(now)}${diffHTML(Math.round((now-then)*100)/100)}`:""}${m.confidence==="hoog"?"":` · <span class="src warn">controleer variant</span> ${esc(m.name)}`}</div>`;
+}
+
 /* ---------- Back-up ---------- */
 const BACKUP=typeof Backup!=="undefined";
 let bkPending=null;
@@ -1549,7 +1668,7 @@ function renderLists(){
   $("listShop").value=listShop;
   $("shopDel").hidden=!customShops.includes(listShop);
   const arr=lists[listShop]||[];
-  $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${typeof Match!=="undefined"&&Match.recentChange(x,Date.now())?` · ${x.price<x.chg.from?"▼":"▲"} was ${eur(x.chg.from)}`:""}${x.gone?" · prijs niet meer gevonden bij deze winkel":""}${listWarn(x)}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button>${HAS_MATCH&&Match.refreshable(x)?` <button class="del" data-act="alarm" data-id="${esc(x.id)}" aria-label="Prijsalarm voor ${esc(x.name)}">🔔</button>`:""}</div>${histLine(x)}${alarmEdit===x.id?`<div class="row" style="margin:6px 0 0"><input id="alarmVal" inputmode="decimal" placeholder="Richtprijs, bv. 2,49" aria-label="Richtprijs in euro" value="${x.tgt?esc(String(x.tgt).replace(".",",")):""}" style="flex:1;min-width:120px"><button data-act="alarmSave" data-id="${esc(x.id)}">Opslaan</button>${x.tgt?`<button data-act="alarmOff" data-id="${esc(x.id)}">Alarm uit</button>`:""}</div>`:""}</div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
+  $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${typeof Match!=="undefined"&&Match.recentChange(x,Date.now())?` · ${x.price<x.chg.from?"▼":"▲"} was ${eur(x.chg.from)}`:""}${x.gone?" · prijs niet meer gevonden bij deze winkel":""}${listWarn(x)}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button>${HAS_MATCH&&Match.refreshable(x)?` <button class="del" data-act="alarm" data-id="${esc(x.id)}" aria-label="Prijsalarm voor ${esc(x.name)}">🔔</button> <button class="del" data-act="hist" data-id="${esc(x.id)}" aria-expanded="${histOpen.has(x.id)}">Prijsverloop</button>`:""}</div>${histLine(x)}${HAS_MATCH&&histOpen.has(x.id)?histPanel(x):""}${alarmEdit===x.id?`<div class="row" style="margin:6px 0 0"><input id="alarmVal" inputmode="decimal" placeholder="Richtprijs, bv. 2,49" aria-label="Richtprijs in euro" value="${x.tgt?esc(String(x.tgt).replace(".",",")):""}" style="flex:1;min-width:120px"><button data-act="alarmSave" data-id="${esc(x.id)}">Opslaan</button>${x.tgt?`<button data-act="alarmOff" data-id="${esc(x.id)}">Alarm uit</button>`:""}</div>`:""}</div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
     :`<p class="mut" style="margin:6px 0">Nog niets op het lijstje van ${esc(listShop)}. Voeg hierboven iets toe, of kies bij een scan "Op lijstje".</p>`;
   const todo=arr.filter(x=>!x.done),unknown=todo.filter(x=>x.price==null).length;
   $("listTotal").innerHTML=arr.length?`<span>Nog te kopen</span><span>${eur(lineSum(arr))}</span>`:"";
@@ -1646,6 +1765,8 @@ $("listItems").addEventListener("click",e=>{
   const act=e.target.dataset?.act,id=e.target.dataset?.id;if(!act)return;
   const arr=lists[listShop]||[],it=arr.find(x=>x.id===id);if(!it)return;
   if(act==="alarm"){alarmEdit=alarmEdit===id?null:id;renderLists();return}
+  if(act==="hist"){if(histOpen.has(id))histOpen.delete(id);else histOpen.add(id);renderLists();return}
+  if(act==="old"){oldErr="";oldLoading=true;renderLists();loadOld().catch(e=>{oldErr=oldMsg(e)}).finally(()=>{oldLoading=false;renderLists()});return}
   if(act==="alarmSave"){
     const v=parseEur($("alarmVal").value);
     if(v==null){toast("Vul een geldige prijs in, bijvoorbeeld 2,49");return}
