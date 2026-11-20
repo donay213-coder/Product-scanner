@@ -70,6 +70,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .sr strong{display:block;font-weight:700}.sr .sub{display:block}.sr .r{text-align:right;font-weight:700;white-space:nowrap}.sr .gb{width:28px;height:32px;font-size:17px}
 .diag{list-style:none;padding:0;margin:8px 0}.diag li{padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}.diag li:last-child{border:0}
 .d-fail strong,.d-fail .mk{color:var(--red)}.d-warn .mk{color:#b06000}.d-ok .mk{color:#038141}.mk{font-weight:800;display:inline-block;width:1.2em}
+#prefsSummary{margin-left:6px;font-weight:400}
 .alg{margin-top:10px;font-size:15px}.alg .hit{color:var(--red);font-weight:800}
 .linkbtn{background:none;border:0;padding:0 4px;min-height:44px;display:inline-flex;align-items:center;text-decoration:underline;color:inherit;font:inherit;cursor:pointer}
 .warnx{color:var(--red);font-weight:700}.okx{color:#038141;font-weight:700}
@@ -186,9 +187,10 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <summary>Mijn voorkeuren <span class="mut" id="prefsSummary"></span></summary>
     <label class="pl"><input type="checkbox" id="prefVeg"> Vegetarisch</label>
     <label class="pl"><input type="checkbox" id="prefVegan"> Vegan</label>
+    <label class="pl"><input type="checkbox" id="prefHalal"> Halal</label>
     <p class="mut" style="margin:8px 0 0">Allergenen</p>
     <div id="prefAlg"></div>
-    <p class="mut" id="prefsNote">Gegevens van Open Food Facts (ODbL), ingevuld door vrijwilligers en vaak onvolledig. De app zegt alleen "past" als de gegevens dat duidelijk laten zien; ontbreken ze, dan staat er een vraagteken. Dit is geen medisch advies: controleer altijd de verpakking.</p>
+    <p class="mut" id="prefsNote">Gegevens van Open Food Facts (ODbL), ingevuld door vrijwilligers en vaak onvolledig. De app zegt alleen "past" als de gegevens dat duidelijk laten zien; ontbreken ze, dan staat er een vraagteken. Halal: "past" alleen met een halal-keurmerk volgens Open Food Facts; varkensvlees of alcohol in de ingrediënten geeft een waarschuwing, en zonder keurmerk staat er een vraagteken. Dit is geen medisch advies: controleer altijd de verpakking.</p>
   </details>
 </section>
 
@@ -229,7 +231,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
       <li>Links naar winkels, folders en webshops openen pas als je erop tikt.</li>
     </ul>
     <h3>Geen medisch advies</h3>
-    <p>Nutri-Score, allergenen en vegetarisch/vegan komen uit Open Food Facts, ingevuld door vrijwilligers, en kunnen onvolledig of verouderd zijn. Dit is geen medisch advies: controleer altijd de verpakking.</p>
+    <p>Nutri-Score, allergenen, vegetarisch/vegan en halal-keurmerken komen uit Open Food Facts, ingevuld door vrijwilligers, en kunnen onvolledig of verouderd zijn. Dit is geen medisch advies: controleer altijd de verpakking.</p>
     <h3>Bronnen en licenties</h3>
     <ul>
       <li><a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>: productgegevens onder de Open Database License (ODbL), losse gegevens onder de Database Contents License, productfoto's onder Creative Commons Naamsvermelding-GelijkDelen (CC BY-SA).</li>
@@ -292,7 +294,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-09a3a78";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-b1d52fe";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -594,7 +596,7 @@ const ALLERGENS = [
 ];
 const GRADES = 'abcde';
 const GENERIC = new Set(['en:foods', 'en:food-and-beverages', 'en:plant-based-foods-and-beverages', 'en:plant-based-foods', 'en:beverages', 'en:snacks', 'en:groceries']);
-const FIELDS = 'code,product_name,product_name_nl,brands,quantity,nutriscore_grade,image_front_small_url,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags';
+const FIELDS = 'code,product_name,product_name_nl,brands,quantity,nutriscore_grade,image_front_small_url,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,labels_tags,ingredients_tags';
 
 const lc = (a) => (Array.isArray(a) ? a : []).map((t) => String(t).toLowerCase());
 const rank = (g) => (/^[a-e]$/.test(g) ? GRADES.indexOf(g) : 9); // onbekende score sorteert achteraan
@@ -614,6 +616,22 @@ function dietStatus(p, diet) {
   return 'onbekend';
 }
 
+// Halal: Open Food Facts rekent dit niet zelf uit. "ja" alleen met een halal-keurmerk (alle certificeerders vallen onder en:halal);
+// varkensvlees (alles met "pork", en reuzel) en alcoholische dranken in de ingrediënten maken het "nee".
+const ALCOHOL = new Set(['en:alcohol', 'en:wine', 'en:beer', 'en:rum', 'en:liqueur', 'en:spirit', 'en:brandy', 'en:cognac', 'en:whisky', 'en:vodka', 'en:gin']);
+function halalInfo(o) {
+  const labs = lc(o && o.labels_tags), ings = lc(o && o.ingredients_tags), bad = [];
+  for (const t of ings) {
+    const w = ALCOHOL.has(t) ? 'alcohol' : t.includes('pork') || t === 'en:lard' ? 'varkensvlees' : '';
+    if (w && !bad.includes(w)) bad.push(w);
+  }
+  return { halalLab: labs.includes('en:halal'), halalBad: bad, gelatin: ings.includes('en:gelatin') || ings.includes('en:e428') };
+}
+function halalStatus(p) {
+  if (p && Array.isArray(p.halalBad) && p.halalBad.length) return 'nee';
+  return p && p.halalLab ? 'ja' : 'onbekend';
+}
+
 function allergenStatus(p, key) {
   if (lc(p && p.alg).includes(key)) return 'bevat';
   if (lc(p && p.traces).includes(key)) return 'sporen';
@@ -624,7 +642,7 @@ function checkPrefs(p, prefs) {
   const none = { verdict: null, issues: [] };
   if (!prefs) return none;
   const vegan = !!prefs.vegan, veg = !!prefs.vegetarian && !vegan, algs = prefs.allergens || [];
-  if (!vegan && !veg && !algs.length) return none;
+  if (!vegan && !veg && !algs.length && !prefs.halal) return none;
   const issues = [];
   const diet = (want, label) => {
     const s = dietStatus(p, want);
@@ -633,6 +651,11 @@ function checkPrefs(p, prefs) {
   };
   if (vegan) diet('vegan', 'vegan');
   if (veg) diet('vegetarian', 'vegetarisch');
+  if (prefs.halal) {
+    const h = halalStatus(p);
+    if (h === 'nee') issues.push({ kind: 'nee', text: `niet halal: bevat ${p.halalBad.join(', ')}` });
+    else if (h === 'onbekend') issues.push({ kind: 'onbekend', text: 'geen halal-keurmerk bekend' + (p && p.gelatin ? ', bevat gelatine van onbekende herkomst' : '') });
+  }
   const unknown = [];
   for (const key of algs) {
     const s = allergenStatus(p, key), name = allergenName(key).toLowerCase();
@@ -660,9 +683,10 @@ function betterGrades(grade) {
   return i === 9 ? ['a', 'b'] : GRADES.split('').slice(0, i);
 }
 
-function searchUrl(tag, grades) {
+function searchUrl(tag, grades, { halal = false } = {}) {
   let u = `https://world.openfoodfacts.org/api/v2/search?categories_tags=${encodeURIComponent(tag)}&countries_tags_en=netherlands&sort_by=popularity_key&page_size=60&fields=${FIELDS}`;
   if (grades && grades.length) u += `&nutrition_grades_tags=${encodeURIComponent(grades.join('|'))}`;
+  if (halal) u += `&labels_tags=${encodeURIComponent('en:halal')}`;
   return u;
 }
 
@@ -673,7 +697,7 @@ function normProduct(o) {
     code: String(o.code || ''), name: o.product_name_nl || o.product_name || '', brand: String(o.brands || '').split(',')[0].trim(),
     qty: o.quantity || '', grade: /^[a-e]$/.test(g) ? g : '', img: o.image_front_small_url || '',
     diet: lc(o.ingredients_analysis_tags), alg: lc(o.allergens_tags), traces: lc(o.traces_tags),
-    ingDone: lc(o.states_tags).includes('en:ingredients-completed'), cats: lc(o.categories_tags),
+    ingDone: lc(o.states_tags).includes('en:ingredients-completed'), cats: lc(o.categories_tags), ...halalInfo(o),
   };
 }
 
@@ -708,17 +732,17 @@ function allergenSummary(p, prefs) {
   const status = contains.length || traces.length ? 'bekend' : p && p.ingDone ? 'geen' : 'onbekend';
   const veg = dietStatus(p, 'vegetarian'), vegan = dietStatus(p, 'vegan');
   const diet = vegan === 'ja' ? 'vegan' : veg === 'ja' ? (vegan === 'nee' ? 'vegetarisch (niet vegan)' : 'vegetarisch') : veg === 'nee' ? 'niet vegetarisch' : '';
-  return { contains, traces, status, diet };
+  return { contains, traces, status, diet, halal: !!(p && p.halalLab) };
 }
 
-const API = { ALLERGENS, allergenName, allergenSummary, dietStatus, allergenStatus, checkPrefs, catCandidates, betterGrades, searchUrl, normProduct, pickAlternatives, sortAlternatives };
+const API = { ALLERGENS, allergenName, allergenSummary, halalInfo, halalStatus, dietStatus, allergenStatus, checkPrefs, catCandidates, betterGrades, searchUrl, normProduct, pickAlternatives, sortAlternatives };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Health = API;
 
 })();</script>
 <script>(function(){
 'use strict';
 // Beoordeelt de antwoorden van de testknop "Werkt alles?". Puur rekenwerk, zonder netwerk.
-const FIELDS = ['product_name', 'nutriscore_grade', 'categories_tags', 'allergens_tags', 'ingredients_analysis_tags', 'states_tags'];
+const FIELDS = ['product_name', 'nutriscore_grade', 'categories_tags', 'allergens_tags', 'ingredients_analysis_tags', 'states_tags', 'labels_tags', 'ingredients_tags'];
 
 function checkProduct(j) {
   const p = j && j.status === 1 && j.product;
@@ -876,7 +900,7 @@ function searchLocal(index, query, { max = 8 } = {}) {
   }).sort((a, b) => b.score - a.score || b.shops - a.shops || a.name.length - b.name.length || a.minPrice - b.minPrice).slice(0, max);
 }
 
-const OFF_FIELDS = 'code,product_name,product_name_nl,brands,quantity,nutriscore_grade,image_front_small_url,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,countries_tags';
+const OFF_FIELDS = 'code,product_name,product_name_nl,brands,quantity,nutriscore_grade,image_front_small_url,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,countries_tags,labels_tags,ingredients_tags';
 function offUrls(q) {
   const e = encodeURIComponent(q);
   return [
@@ -1056,11 +1080,11 @@ function loadCjb(strict){
 }
 async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} = productgegevens die we al hebben, dan geen Open Food Facts-opvraging // zonder server: alles in de browser
   const [p,pr]=await Promise.allSettled([
-    code&&!known?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade,categories_tags,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags`):null,
+    code&&!known?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade,categories_tags,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,labels_tags,ingredients_tags`):null,
     code?getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`):null
   ]);
   const o=p.status==="fulfilled"&&p.value&&p.value.status===1?p.value.product:null;
-  const product=known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed")}:null;
+  const product=known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed"),...(typeof Health!=="undefined"?Health.halalInfo(o):{})}:null;
   const prices=[],seen=new Set(),sources={standalone:true,openprices:!code?"niet gevraagd":pr.status==="fulfilled"?"ok":"niet bereikbaar"};
   if(pr.status==="fulfilled"&&pr.value)for(const it of pr.value.items||[]){
     if(it.price==null)continue;const L=it.location||{};const shop=L.osm_name||"Onbekende winkel",place=[L.osm_address_city,L.osm_address_country].filter(Boolean).join(", ");
@@ -1175,21 +1199,22 @@ $("hist").addEventListener("click",e=>{const c=e.target.closest("button")?.datas
 
 /* ---------- Voorkeuren en gezondere alternatieven ---------- */
 const HEALTH=typeof Health!=="undefined"&&typeof Match!=="undefined";
-let prefs=(p=>({vegetarian:!!p.vegetarian,vegan:!!p.vegan,allergens:Array.isArray(p.allergens)?p.allergens:[]}))(store.get("prefs",{}));
-const prefsOn=()=>HEALTH&&(prefs.vegan||prefs.vegetarian||prefs.allergens.length>0);
+let prefs=(p=>({vegetarian:!!p.vegetarian,vegan:!!p.vegan,halal:!!p.halal,allergens:Array.isArray(p.allergens)?p.allergens:[]}))(store.get("prefs",{}));
+const prefsOn=()=>HEALTH&&(prefs.vegan||prefs.vegetarian||prefs.halal||prefs.allergens.length>0);
 function renderPrefsSummary(){
-  const n=[prefs.vegan?"vegan":prefs.vegetarian?"vegetarisch":"",...prefs.allergens.map(k=>Health.allergenName(k).toLowerCase())].filter(Boolean);
+  const n=[prefs.vegan?"vegan":prefs.vegetarian?"vegetarisch":"",prefs.halal?"halal":"",...prefs.allergens.map(k=>Health.allergenName(k).toLowerCase())].filter(Boolean);
   $("prefsSummary").textContent=n.length?`(${n.join(", ")})`:"";
 }
 function savePrefs(){store.set("prefs",prefs);renderPrefsSummary();if(current){renderAllergens();renderPrefBadge()}$("altOut").innerHTML="";renderLists()}
 function initPrefs(){
   $("prefsWrap").hidden=!HEALTH;if(!HEALTH)return;
-  $("prefVeg").checked=prefs.vegetarian;$("prefVegan").checked=prefs.vegan;
+  $("prefVeg").checked=prefs.vegetarian;$("prefVegan").checked=prefs.vegan;$("prefHalal").checked=prefs.halal;
   $("prefAlg").innerHTML=Health.ALLERGENS.map(a=>`<label class="pl"><input type="checkbox" data-alg="${a.key}"${prefs.allergens.includes(a.key)?" checked":""}> ${esc(a.nl)}</label>`).join("");
   renderPrefsSummary();
 }
 $("prefVeg").addEventListener("change",()=>{prefs.vegetarian=$("prefVeg").checked;savePrefs()});
 $("prefVegan").addEventListener("change",()=>{prefs.vegan=$("prefVegan").checked;savePrefs()});
+$("prefHalal").addEventListener("change",()=>{prefs.halal=$("prefHalal").checked;savePrefs()});
 $("prefAlg").addEventListener("change",e=>{
   const k=e.target.dataset&&e.target.dataset.alg;if(!k)return;
   const set=new Set(prefs.allergens);if(e.target.checked)set.add(k);else set.delete(k);
@@ -1213,6 +1238,7 @@ function renderAllergens(){
   if(s.traces.length)parts.push(`Kan sporen bevatten: ${s.traces.map(nm).join(", ")}`);
   if(!parts.length)parts.push(s.status==="geen"?"Geen allergenen gemeld":"Allergenen onbekend: de ingrediëntenlijst is onvolledig");
   if(s.diet)parts.push(esc(s.diet));
+  if(s.halal)parts.push("halal-keurmerk");
   el.innerHTML=`<div class="alg">${parts.join(" · ")}</div>`+(prefsOn()?"":`<div class="mut">Volgens Open Food Facts, controleer altijd de verpakking.</div><button class="linkbtn" data-open-prefs="1">Mijn allergieën instellen</button>`);
 }
 $("allergens").addEventListener("click",e=>{if(e.target.dataset&&e.target.dataset.openPrefs){$("prefsBox").open=true;$("prefsWrap").scrollIntoView({behavior:"smooth",block:"start"})}});
@@ -1223,6 +1249,8 @@ function histLine(x){
   const t=[st?`laagste ${eur(st.min)} · hoogste ${eur(st.max)}`:"",al].filter(Boolean).join(" · ");
   return t?`<div class="sub">${t}</div>`:"";
 }
+// Wat een lijstje nodig heeft om te waarschuwen (klein gehouden: geen volledige ingrediëntenlijst).
+const alOf=p=>p&&Array.isArray(p.alg)?{diet:p.diet||[],alg:p.alg,traces:p.traces||[],ingDone:!!p.ingDone,halalLab:!!p.halalLab,halalBad:p.halalBad||[],gelatin:!!p.gelatin}:null;
 function listWarn(x){
   if(!prefsOn()||!x.al)return "";
   const r=Health.checkPrefs(x.al,prefs);
@@ -1253,8 +1281,8 @@ async function findAlternatives(){
     let best=null,cat="",err=null;
     try{
       for(const tag of cats){
-        let prods=await searchOff(Health.searchUrl(tag,better));
-        if(!prods.length)prods=await searchOff(Health.searchUrl(tag,null)); // scorefilter werkt niet of levert niets: zonder filter, wij filteren zelf
+        let prods=await searchOff(Health.searchUrl(tag,better,{halal:prefs.halal}));
+        if(!prods.length)prods=await searchOff(Health.searchUrl(tag,null,{halal:prefs.halal})); // scorefilter werkt niet of levert niets: zonder filter, wij filteren zelf
         const pick=Health.pickAlternatives(prods,cur,prefs);
         if(!best||pick.items.length>best.items.length){best=pick;cat=tag}
         if(pick.items.length>=3)break;
@@ -1446,7 +1474,7 @@ function addToList(row){
   const ex=arr.find(x=>(current.code&&x.ean===current.code)||(!x.ean&&x.name.toLowerCase()===name.toLowerCase()));
   const pm={};for(const x of eurs){if(pm[x.shop]==null||x.price<pm[x.shop])pm[x.shop]=x.price}
   const q=!current.code&&d.query?d.query:"",mq=current.code&&p.name?{name:p.name,brand:p.brand||"",qty:p.qty||""}:null;
-  const al=Array.isArray(p.alg)?{diet:p.diet||[],alg:p.alg,traces:p.traces||[],ingDone:!!p.ingDone}:null;
+  const al=alOf(p);
   if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm;ex.upd=Date.now();ex.gone=false;delete ex.chg;if(q&&!ex.q)ex.q=q;if(mq)ex.mq=mq;if(al)ex.al=al;if(HAS_MATCH)ex.ph=Match.recordPrice(ex.ph,Date.now(),ex.price)}
   else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm,upd:Date.now(),...(q?{q}:{}),...(mq?{mq}:{}),...(al?{al}:{}),...(HAS_MATCH&&price!=null?{ph:Match.recordPrice(null,Date.now(),price)}:{})});
   listShop=shop;store.set("listShop",listShop);saveLists();renderLists();
@@ -1528,7 +1556,7 @@ async function refreshPrices(manual){
       const pm=Match.minByShop([...(d.prices||[]),...mine]);
       if(!Object.keys(pm).length)throw new Error("geen prijzen gevonden");
       const mqNew=job.ean&&d.product&&d.product.name?{name:d.product.name,brand:d.product.brand||"",qty:d.product.qty||""}:null;
-      for(const [shop,it] of job.refs){const n=Match.applyFresh(it,pm,shop,now);if(it.price!=null&&n.price!==it.price)changed++;Object.assign(it,n);it.ph=Match.recordPrice(it.ph,now,it.price);const hit=Match.alarmHit(it);if(Match.newAlarm(it.hit,hit))alarms.push({name:it.name,...hit});it.hit=hit;if(!it.mq&&mqNew)it.mq=mqNew;if(!it.al&&d.product&&Array.isArray(d.product.alg))it.al={diet:d.product.diet||[],alg:d.product.alg,traces:d.product.traces||[],ingDone:!!d.product.ingDone}}
+      for(const [shop,it] of job.refs){const n=Match.applyFresh(it,pm,shop,now);if(it.price!=null&&n.price!==it.price)changed++;Object.assign(it,n);it.ph=Match.recordPrice(it.ph,now,it.price);const hit=Match.alarmHit(it);if(Match.newAlarm(it.hit,hit))alarms.push({name:it.name,...hit});it.hit=hit;if(!it.mq&&mqNew)it.mq=mqNew;if(!it.al&&d.product&&Array.isArray(d.product.alg))it.al=alOf(d.product)}
     }catch(e){failed++}
     refreshUI(true,++done,todo.length);
   };
