@@ -177,6 +177,13 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <input id="liPrice" inputmode="decimal" placeholder="Prijs (optioneel)" aria-label="Prijs in euro">
     <button class="pri" type="submit">Toevoegen</button>
   </form>
+  <div class="card" id="refreshBar" hidden style="margin-bottom:12px">
+    <div class="row" style="margin:0;align-items:center">
+      <button id="refreshBtn" class="pri" type="button">↻ Prijzen verversen</button>
+      <span class="mut" id="refreshInfo" aria-live="polite"></span>
+    </div>
+    <label class="mut" style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="autoRefresh" style="width:22px;min-height:22px"> Automatisch verversen als de prijzen ouder zijn dan 12 uur</label>
+  </div>
   <div class="card"><div id="listItems"></div><div class="tot" id="listTotal"></div><p class="mut" id="listNote"></p></div>
   <div class="card" id="basketCard" hidden style="margin-top:12px">
     <p style="margin:0 0 4px;font-weight:800;font-size:18px">Waar is je lijstje het goedkoopst?</p>
@@ -344,7 +351,54 @@ function compareBasket(items) {
   };
 }
 
-const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket };
+
+// ---- Prijzen verversen ----
+const HOUR = 3600e3;
+// Laagste euro-prijs per winkel.
+function minByShop(prices) {
+  const pm = {};
+  for (const x of prices || []) {
+    if (!x || x.cur !== 'EUR' || !(x.price > 0)) continue;
+    if (pm[x.shop] == null || x.price < pm[x.shop]) pm[x.shop] = x.price;
+  }
+  return pm;
+}
+// Is nieuwe data compleet genoeg om opgeslagen prijzen mee te vervangen? Anders blijven de oude staan.
+function freshOk(s) {
+  if (!s || s.openprices === 'niet bereikbaar') return false;
+  const c = s.checkjebon;
+  return !!(c && c.status === 'ok' && c.producten > 0);
+}
+const refreshable = (it) => !!(it && (it.ean || it.q) && it.name !== it.ean);
+const isStale = (it, now, maxAge) => refreshable(it) && (!it.upd || now - it.upd > maxAge);
+const recentChange = (it, now) => (it && it.chg && now - it.chg.at < 24 * HOUR ? it.chg : null);
+// Nieuw item op basis van verse prijzen per winkel; het origineel blijft ongemoeid.
+function applyFresh(item, pm, shop, now) {
+  const fresh = pm ? pm[shop] : undefined;
+  const out = { ...item, pm: { ...pm }, upd: now, gone: false };
+  if (fresh != null) {
+    if (item.price != null && Math.abs(fresh - item.price) >= 0.005) out.chg = { from: item.price, at: now };
+    out.price = fresh;
+    const best = Object.entries(pm).sort((a, b) => a[1] - b[1])[0];
+    out.alt = best && best[0] !== shop && best[1] < fresh - 0.005 ? { shop: best[0], price: best[1] } : null;
+  } else {
+    out.gone = item.price != null;
+    out.alt = null;
+  }
+  return out;
+}
+function ageText(ts, now) {
+  if (!ts) return 'nog niet ververst';
+  const m = Math.floor((now - ts) / 60e3);
+  if (m < 2) return 'zojuist';
+  if (m < 60) return `${m} minuten geleden`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} uur geleden`;
+  const d = Math.floor(h / 24);
+  return `${d} ${d === 1 ? 'dag' : 'dagen'} geleden`;
+}
+
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
 
 })();</script>
@@ -524,11 +578,11 @@ async function viaServer(code,q){
   const r=await fetch("api/lookup?"+p);if(!r.ok)throw new Error("server "+r.status);return r.json();
 }
 const CJB_URLS=["https://cdn.jsdelivr.net/gh/supermarkt/checkjebon@main/data/supermarkets.json","https://raw.githubusercontent.com/supermarkt/checkjebon/main/data/supermarkets.json"];
-let cjb=null;
-async function loadCjb(){ // supermarktprijzen (Checkjebon), 12 uur bewaard op dit apparaat
-  if(cjb)return cjb;
-  let raw=null,err;
-  try{const c=await caches.open("cjb"),hit=await c.match("/cjb-data");if(hit&&Date.now()-store.get("cjbTs",0)<12*3600e3)raw=await hit.json()}catch(e){}
+let cjb=null,cjbAt=0,cjbP=null;
+const CJB_TTL=12*3600e3;
+async function fetchCjb(){ // supermarktprijzen (Checkjebon), 12 uur bewaard op dit apparaat
+  let raw=null,err,from=0;
+  try{const c=await caches.open("cjb"),hit=await c.match("/cjb-data");if(hit&&Date.now()-store.get("cjbTs",0)<CJB_TTL){raw=await hit.json();from=store.get("cjbTs",0)}}catch(e){}
   if(!raw)for(const u of CJB_URLS){
     try{const r=await fetch(u);if(!r.ok)throw new Error("HTTP "+r.status);const copy=r.clone();raw=await r.json();
       try{const c=await caches.open("cjb");await c.put("/cjb-data",copy);store.set("cjbTs",Date.now())}catch(e){}break}
@@ -536,9 +590,16 @@ async function loadCjb(){ // supermarktprijzen (Checkjebon), 12 uur bewaard op d
   }
   if(!raw)throw err||new Error("geen data");
   cjb=raw.filter(c=>c&&Array.isArray(c.d)).map(c=>({key:String(c.n),items:c.d.map(Match.prepareItem).filter(Boolean)}));
+  cjbAt=from||Date.now();
   return cjb;
 }
-async function viaBrowser(code,qText){ // zonder server: alles in de browser
+// strict: gebruik nooit verouderde data (verversen). Zonder strict valt scannen terug op oude data als er geen verbinding is.
+function loadCjb(strict){
+  if(cjb&&Date.now()-cjbAt<CJB_TTL)return Promise.resolve(cjb);
+  if(!cjbP)cjbP=fetchCjb().finally(()=>{cjbP=null});
+  return cjbP.catch(e=>{if(cjb&&!strict)return cjb;throw e});
+}
+async function viaBrowser(code,qText,strict){ // zonder server: alles in de browser
   const [p,pr]=await Promise.allSettled([
     code?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade`):null,
     code?getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`):null
@@ -553,13 +614,22 @@ async function viaBrowser(code,qText){ // zonder server: alles in de browser
   }
   const q=Match.buildQuery({name:product?.name,brand:product?.brand,qty:product?.qty,q:qText});
   try{
-    const chains=await loadCjb();
+    const chains=await loadCjb(strict);
     const m=q.tokens.size?Match.findMatches(chains,q):[];
     for(const x of m){const c=Shops.chainInfo(x.chain);prices.push({source:"Checkjebon",shop:c.name,place:"online prijs",matchedName:x.name,size:x.size,price:x.price,cur:"EUR",unit:x.unit,confidence:x.confidence,url:c.product&&x.link&&c.key==="ah"?c.product(x.link):c.search?c.search(q.text):""})}
     sources.checkjebon={status:"ok",producten:chains.reduce((n,c)=>n+c.items.length,0),gevonden:m.length,bijgewerkt:new Date(store.get("cjbTs",Date.now())).toISOString().slice(0,10)};
   }catch(e){sources.checkjebon={status:"niet bereikbaar",fout:String(e.message||e)}}
   const text=q.text||code;
   return {ean:code,product,query:text,prices,links:Shops.links(text),sources};
+}
+async function fetchData(code,q,strict){ // opzoeken zonder iets te tekenen (ook voor verversen)
+  try{
+    if(window.STANDALONE)throw new Error("zonder server");
+    return await viaServer(code,q);
+  }catch(e){
+    if(typeof Match==="undefined")throw new Error("server niet bereikbaar");
+    return viaBrowser(code,q,strict);
+  }
 }
 async function lookup(code,q){
   code=code||"";
@@ -570,13 +640,7 @@ async function lookup(code,q){
   $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";
   $("result").scrollIntoView({behavior:"smooth",block:"start"});
   let d;
-  try{
-    if(window.STANDALONE)throw new Error("zonder server");
-    d=await viaServer(code,q);
-  }catch(e){
-    if(typeof Match==="undefined"){showErr("Opzoeken mislukt: de server is niet bereikbaar.");return}
-    d=await viaBrowser(code,q);
-  }
+  try{d=await fetchData(code,q)}catch(e){showErr("Opzoeken mislukt: de server is niet bereikbaar.");return}
   if(code&&names[code]&&!(d.product&&d.product.name))d.product={...(d.product||{}),name:names[code],brand:"",qty:"",img:"",nutri:"",nova:"",eco:""};
   current={code,data:d};
   if(code)addHistory({code,name:d.product?.name||code});
@@ -668,8 +732,9 @@ function addToList(row){
   const arr=lists[shop]=lists[shop]||[];
   const ex=arr.find(x=>(current.code&&x.ean===current.code)||(!x.ean&&x.name.toLowerCase()===name.toLowerCase()));
   const pm={};for(const x of eurs){if(pm[x.shop]==null||x.price<pm[x.shop])pm[x.shop]=x.price}
-  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm}
-  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm});
+  const q=!current.code&&d.query?d.query:"";
+  if(ex){ex.qty++;ex.done=false;if(price!=null)ex.price=price;ex.alt=alt;ex.pm=pm;ex.upd=Date.now();ex.gone=false;delete ex.chg;if(q&&!ex.q)ex.q=q}
+  else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:current.code||"",name,price,qty:1,done:false,alt,pm,upd:Date.now(),...(q?{q}:{})});
   listShop=shop;store.set("listShop",listShop);saveLists();renderLists();
   toast(`Op het lijstje van ${shop}`);
 }
@@ -679,21 +744,22 @@ function basketItems(all){
   const src=all?Object.values(lists).flat():(lists[listShop]||[]),map=new Map();
   for(const x of src){
     if(x.done)continue;const k=x.ean||x.name.toLowerCase(),ex=map.get(k);
-    if(!ex)map.set(k,{name:x.name,qty:x.qty,pm:x.pm?{...x.pm}:null});
-    else{ex.qty=Math.max(ex.qty,x.qty);if(x.pm){ex.pm=ex.pm||{};for(const [sh,pr] of Object.entries(x.pm))if(ex.pm[sh]==null||pr<ex.pm[sh])ex.pm[sh]=pr}}
+    if(!ex)map.set(k,{name:x.name,qty:x.qty,pm:x.pm?{...x.pm}:null,upd:x.upd||0});
+    else{ex.qty=Math.max(ex.qty,x.qty);if(x.upd&&(!ex.upd||x.upd<ex.upd))ex.upd=x.upd;if(x.pm){ex.pm=ex.pm||{};for(const [sh,pr] of Object.entries(x.pm))if(ex.pm[sh]==null||pr<ex.pm[sh])ex.pm[sh]=pr}}
   }
   return [...map.values()];
 }
 function renderBasket(){
   if(typeof Match==="undefined"){$("basketCard").hidden=true;return}
-  const r=Match.compareBasket(basketItems($("basketAll").checked));
+  const bi=basketItems($("basketAll").checked),r=Match.compareBasket(bi);
   if(!r.priced){$("basketCard").hidden=true;return}
   $("basketCard").hidden=false;
   const first=r.rows.find(x=>x.complete),n=r.priced;
   let h=first?`<p style="margin:6px 0">Goedkoopst bij <strong>${esc(first.shop)}</strong>: ${eur(first.total)}</p>`:`<p style="margin:6px 0">Geen enkele winkel heeft alle ${n} producten. De meeste (${r.rows[0].have} van ${n}) heeft <strong>${esc(r.rows[0].shop)}</strong>.</p>`;
   h+=r.rows.slice(0,6).map(x=>`<div class="br${first&&x===first?" best":""}"><div><strong>${esc(x.shop)}</strong><div class="sub">${x.complete?(n===1?"1 product":`alle ${n} producten`):`${x.have} van ${n} producten${x.missing.length?`, mist: ${esc(x.missing.slice(0,3).join(", "))}${x.missing.length>3?"…":""}`:""}`}</div></div><div class="p">${eur(x.total)}${first&&x.complete&&x!==first?`<div class="diff">+ ${eur(x.total-first.total)}</div>`:""}</div></div>`).join("");
   if(r.mix.shops.length>1)h+=`<div class="sav">Elk product bij de goedkoopste winkel: <strong>${eur(r.mix.total)}</strong> (${r.mix.shops.length} winkels)${r.saving>=0.01?`, dat scheelt ${eur(r.saving)} met de beste enkele winkel`:""}.</div><details><summary>Wat koop je waar</summary>${r.mix.picks.map(x=>`<div class="br"><div>${x.qty>1?x.qty+"x ":""}${esc(x.name)}</div><div class="p">${esc(x.shop)} · ${eur(x.price)}</div></div>`).join("")}</details>`;
-  h+=`<p class="mut" style="margin:8px 0 0">${r.skipped?`${r.skipped} ${r.skipped===1?"product":"producten"} zonder prijs ${r.skipped===1?"is":"zijn"} niet meegeteld. `:""}Gebaseerd op de prijzen op het moment dat je een product op het lijstje zette.</p>`;
+  const upds=bi.filter(x=>x.pm&&Object.keys(x.pm).length&&x.upd).map(x=>x.upd);
+  h+=`<p class="mut" style="margin:8px 0 0">${r.skipped?`${r.skipped} ${r.skipped===1?"product":"producten"} zonder prijs ${r.skipped===1?"is":"zijn"} niet meegeteld. `:""}${upds.length?`Gebaseerd op prijzen van ${Match.ageText(Math.min(...upds),Date.now())}.`:"Gebaseerd op de prijzen op het moment dat je een product op het lijstje zette."}</p>`;
   $("basket").innerHTML=h;
 }
 function renderLists(){
@@ -704,18 +770,75 @@ function renderLists(){
   $("listShop").value=listShop;
   $("shopDel").hidden=!customShops.includes(listShop);
   const arr=lists[listShop]||[];
-  $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button></div></div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
+  $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${typeof Match!=="undefined"&&Match.recentChange(x,Date.now())?` · ${x.price<x.chg.from?"▼":"▲"} was ${eur(x.chg.from)}`:""}${x.gone?" · prijs niet meer gevonden bij deze winkel":""}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button></div></div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
     :`<p class="mut" style="margin:6px 0">Nog niets op het lijstje van ${esc(listShop)}. Voeg hierboven iets toe, of kies bij een scan "Op lijstje".</p>`;
   const todo=arr.filter(x=>!x.done),unknown=todo.filter(x=>x.price==null).length;
   $("listTotal").innerHTML=arr.length?`<span>Nog te kopen</span><span>${eur(lineSum(arr))}</span>`:"";
   $("listNote").textContent=unknown?`${unknown} ${unknown===1?"product heeft":"producten hebben"} geen prijs en ${unknown===1?"telt":"tellen"} niet mee.`:"";
   const n=countAll();$("listCount").textContent=n?`(${n})`:"";
-  renderBasket();
+  renderBasket();renderRefresh();
 }
+/* ---------- Prijzen verversen ---------- */
+const MAXAGE=12*3600e3;
+let refreshing=false,lastTry=0;
+function renderRefresh(){
+  if(typeof Match==="undefined"){$("refreshBar").hidden=true;return}
+  const items=Object.values(lists).flat().filter(x=>!x.done&&Match.refreshable(x));
+  $("refreshBar").hidden=!items.length;
+  if(!items.length)return;
+  const oldest=Math.min(...items.map(x=>x.upd||0));
+  $("refreshInfo").textContent=oldest?`Bijgewerkt ${Match.ageText(oldest,Date.now())}`:"Nog niet ververst";
+}
+function refreshUI(busy,done,total){
+  const b=$("refreshBtn");b.disabled=busy;
+  b.textContent=busy?`Verversen… ${done}/${total}`:"↻ Prijzen verversen";
+}
+async function refreshPrices(manual){
+  if(refreshing||typeof Match==="undefined")return;
+  const jobs=new Map();
+  for(const [shop,arr] of Object.entries(lists))for(const it of arr){
+    if(it.done||!Match.refreshable(it))continue;
+    const k=it.ean||"q:"+it.q;
+    if(!jobs.has(k))jobs.set(k,{ean:it.ean,q:it.q,refs:[]});
+    jobs.get(k).refs.push([shop,it]);
+  }
+  const todo=[...jobs.values()];if(!todo.length)return;
+  refreshing=true;let changed=0,failed=0,done=0;refreshUI(true,0,todo.length);
+  const now=Date.now();
+  const run=async job=>{
+    try{
+      const d=await fetchData(job.ean,job.ean?(names[job.ean]||""):job.q,true);
+      if(!Match.freshOk(d.sources))throw new Error("bron niet volledig");
+      if(job.ean&&!(d.product&&d.product.name)&&!names[job.ean])throw new Error("productgegevens ontbreken");
+      const mine=store.get("mine:"+(job.ean||job.q),[]).map(m=>({...m,cur:"EUR"}));
+      const pm=Match.minByShop([...(d.prices||[]),...mine]);
+      if(!Object.keys(pm).length)throw new Error("geen prijzen gevonden");
+      for(const [shop,it] of job.refs){const n=Match.applyFresh(it,pm,shop,now);if(it.price!=null&&n.price!==it.price)changed++;Object.assign(it,n)}
+    }catch(e){failed++}
+    refreshUI(true,++done,todo.length);
+  };
+  try{
+    let i=0;
+    await Promise.all(Array.from({length:Math.min(3,todo.length)},async()=>{while(i<todo.length)await run(todo[i++])}));
+  }finally{refreshing=false;saveLists();refreshUI(false);renderLists()}
+  if(manual||changed){
+    const a=changed?`${changed} ${changed===1?"prijs":"prijzen"} gewijzigd`:failed?"":"Prijzen zijn actueel";
+    const b=failed?`${failed} ${failed===1?"product":"producten"} niet gelukt, oude prijs blijft staan`:"";
+    toast([a,b].filter(Boolean).join(", "));
+  }
+}
+function autoRefresh(){
+  if(typeof Match==="undefined"||refreshing||!$("autoRefresh").checked)return;
+  const now=Date.now();if(now-lastTry<30*60e3)return;
+  if(Object.values(lists).flat().some(x=>!x.done&&Match.isStale(x,now,MAXAGE))){lastTry=now;refreshPrices(false)}
+}
+$("autoRefresh").checked=store.get("autoRefresh",true);
+$("autoRefresh").addEventListener("change",()=>store.set("autoRefresh",$("autoRefresh").checked));
+$("refreshBtn").addEventListener("click",()=>{lastTry=Date.now();refreshPrices(true)});
 function showTab(t){
   const l=t==="list";$("scanView").hidden=l;$("listView").hidden=!l;
   $("tabScan").setAttribute("aria-pressed",String(!l));$("tabList").setAttribute("aria-pressed",String(l));
-  if(l)renderLists();
+  if(l){renderLists();autoRefresh()}
 }
 $("tabScan").addEventListener("click",()=>showTab("scan"));
 $("tabList").addEventListener("click",()=>showTab("list"));
