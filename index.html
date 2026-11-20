@@ -65,6 +65,9 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .chip{font-size:13px;border:1.5px solid var(--line);border-radius:99px;padding:3px 10px;white-space:nowrap}
 .chip b{font-weight:800}
 #aboutBox h3{font-size:16px;margin:14px 0 4px}#aboutBox ul{padding-left:20px;margin:4px 0}#aboutBox li{margin:4px 0}#aboutBox a{color:inherit}
+.sres{margin:4px 0 14px}.sres h3{font-size:13px;margin:14px 0 2px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.sr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;width:100%;text-align:left;background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 2px;min-height:56px;font-weight:400}
+.sr strong{display:block;font-weight:700}.sr .sub{display:block}.sr .r{text-align:right;font-weight:700;white-space:nowrap}.sr .gb{width:28px;height:32px;font-size:17px}
 .diag{list-style:none;padding:0;margin:8px 0}.diag li{padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}.diag li:last-child{border:0}
 .d-fail strong,.d-fail .mk{color:var(--red)}.d-warn .mk{color:#b06000}.d-ok .mk{color:#038141}.mk{font-weight:800;display:inline-block;width:1.2em}
 .alg{margin-top:10px;font-size:15px}.alg .hit{color:var(--red);font-weight:800}
@@ -115,6 +118,11 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div id="scanView">
 
 <section>
+  <form class="ean" id="eanForm" role="search" style="margin-top:0">
+    <input id="eanInput" type="search" enterkeyhint="search" autocomplete="off" placeholder="Zoek product of barcode" aria-label="Zoek een product op naam of barcode">
+    <button class="pri" type="submit">Zoek</button>
+  </form>
+  <div id="searchOut" aria-live="polite"></div>
   <div class="view" id="view">
     <video id="video" playsinline muted hidden></video>
     <div class="frame" id="frame" hidden></div>
@@ -129,10 +137,6 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <label class="btn" for="photo">Foto kiezen</label>
     <input type="file" id="photo" accept="image/*" capture="environment" hidden>
   </div>
-  <form class="ean" id="eanForm">
-    <input id="eanInput" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="Of typ de barcode (EAN)" aria-label="Barcode">
-    <button type="submit">Zoek</button>
-  </form>
   <p class="msg err" id="err" hidden></p>
 </section>
 
@@ -215,6 +219,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
       <li>Wat de telefoon wel verlaat:
         <ul>
           <li>bij scannen en verversen: de barcode of productnaam naar Open Food Facts en Open Prices;</li>
+          <li>bij zoeken op naam: je zoekwoorden naar Open Food Facts (search.openfoodfacts.org), maar pas als je op Zoek drukt. Wat je tijdens het typen ziet, wordt op je telefoon gezocht;</li>
           <li>bij "Gezondere keuzes": de productcategorie naar Open Food Facts;</li>
           <li>de supermarktprijzen: één bestand van Checkjebon, gedownload via jsDelivr of GitHub;</li>
           <li>de barcodelezer ZXing van unpkg.com, alleen als je browser zelf geen barcodes kan lezen;</li>
@@ -287,7 +292,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-83b1263";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-09a3a78";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -824,6 +829,95 @@ const API = { exportData, parseBackup, applyBackup, fileName };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Backup = API;
 
 })();</script>
+<script>(function(){
+'use strict';
+// Zoeken op naam: lokaal in de supermarktdata (tijdens het typen, niets verlaat de telefoon)
+// en in Open Food Facts (pas bij "Zoek", vanwege de limiet van 10 zoekopdrachten per minuut).
+const M = typeof module !== 'undefined' && module.exports ? require('./match') : globalThis.Match;
+const H = typeof module !== 'undefined' && module.exports ? require('./health') : globalThis.Health;
+
+// Eén keer per geladen dataset: platte lijst met genormaliseerde namen en een groepssleutel per product.
+function buildIndex(chains, chainName) {
+  const out = [];
+  for (const c of chains || []) {
+    const shop = chainName ? chainName(c.key) : c.key;
+    for (const it of c.items || []) {
+      const z = it.size, sizeKey = z ? `${z.unit}:${Math.round(z.amount)}` : M.norm(it.s);
+      out.push({ shop, it, nn: M.norm(it.n), gkey: [...it.tokens].sort().join(' ') + '|' + sizeKey });
+    }
+  }
+  return out;
+}
+
+function searchLocal(index, query, { max = 8 } = {}) {
+  const terms = M.tokens(M.stripSize(query)).filter((t) => t.length >= 2);
+  if (!terms.length) return [];
+  const qs = M.parseSize(query), whole = M.norm(M.stripSize(query));
+  const groups = new Map();
+  for (const e of index) {
+    let sc = 0;
+    for (const t of terms) {
+      if (e.nn.startsWith(t) || e.nn.includes(' ' + t)) sc += 3;
+      else if (e.nn.includes(t)) sc += 1;
+      else { sc = -1; break; }
+    }
+    if (sc < 0) continue;
+    if (e.nn === whole) sc += 2;
+    if (qs && e.it.size) sc += M.sizeCompare(qs, e.it.size) === 'same' ? 3 : -1;
+    let g = groups.get(e.gkey);
+    if (!g) groups.set(e.gkey, (g = { name: e.it.n, size: e.it.s, score: sc, byShop: new Map() }));
+    g.score = Math.max(g.score, sc);
+    const old = g.byShop.get(e.shop);
+    if (old == null || e.it.p < old) g.byShop.set(e.shop, e.it.p);
+  }
+  return [...groups.values()].map((g) => {
+    const offers = [...g.byShop].map(([shop, price]) => ({ shop, price })).sort((a, b) => a.price - b.price);
+    return { name: g.name, size: g.size, score: g.score, offers, shops: offers.length, minPrice: offers[0].price, cheapest: offers[0].shop, q: [g.name, g.size].filter(Boolean).join(' ') };
+  }).sort((a, b) => b.score - a.score || b.shops - a.shops || a.name.length - b.name.length || a.minPrice - b.minPrice).slice(0, max);
+}
+
+const OFF_FIELDS = 'code,product_name,product_name_nl,brands,quantity,nutriscore_grade,image_front_small_url,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,countries_tags';
+function offUrls(q) {
+  const e = encodeURIComponent(q);
+  return [
+    { src: 'search.openfoodfacts.org', url: `https://search.openfoodfacts.org/search?q=${e}&langs=nl,en&page_size=24&fields=${OFF_FIELDS}` },
+    { src: 'de oude zoekfunctie', url: `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${e}&search_simple=1&action=process&json=1&page_size=24&fields=${OFF_FIELDS}` },
+  ];
+}
+
+// Velden kunnen bij de nieuwe zoekdienst een lijst of per taal zijn; neem de bruikbare waarde.
+const pick = (v) => (Array.isArray(v) ? v[0] : v && typeof v === 'object' ? v.nl || v.main || Object.values(v)[0] : v);
+function normHit(o) {
+  if (!o || typeof o !== 'object') return null;
+  const p = H.normProduct({
+    ...o, product_name: pick(o.product_name) || '', product_name_nl: pick(o.product_name_nl) || '',
+    brands: Array.isArray(o.brands) ? o.brands.join(', ') : o.brands, quantity: pick(o.quantity) || '',
+  });
+  return p && { ...p, nl: (Array.isArray(o.countries_tags) ? o.countries_tags : []).map((t) => String(t).toLowerCase()).includes('en:netherlands') };
+}
+function parseOff(json) {
+  const arr = json && (Array.isArray(json.hits) ? json.hits : Array.isArray(json.products) ? json.products : null);
+  if (!arr) return null;
+  const seen = new Set(), out = [];
+  for (const o of arr) {
+    const p = normHit(o);
+    if (!p || !p.code || !p.name || seen.has(p.code)) continue;
+    seen.add(p.code); out.push(p);
+  }
+  return out.map((p, i) => [p, i]).sort(([a, i], [b, j]) => (b.nl - a.nl) || i - j).map(([p]) => p);
+}
+
+const ORDER = { ja: 0, onbekend: 1, nee: 2 };
+function rankForPrefs(items, prefs) {
+  const out = (items || []).map((x) => { const c = H.checkPrefs(x, prefs); return { ...x, verdict: c.verdict, issues: c.issues }; });
+  if (!out.some((x) => x.verdict)) return out;
+  return out.map((x, i) => [x, i]).sort(([a, i], [b, j]) => ORDER[a.verdict] - ORDER[b.verdict] || i - j).map(([x]) => x);
+}
+
+const API = { buildIndex, searchLocal, offUrls, parseOff, rankForPrefs };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Search = API;
+
+})();</script>
 <script>
 {
 const SHOPS=[
@@ -1220,6 +1314,10 @@ async function runDiag(){
     const allowed=["a","b"];
     x=await diagFetch(Health.searchUrl("en:breakfast-cereals",allowed));
     add("Open Food Facts zoeken",x.problem||Diag.checkSearch(x.json,allowed));
+    if(typeof Search!=="undefined"){
+      const r=await offNameSearch("pindakaas");
+      add("Open Food Facts zoeken op naam",r.error?(r.rate?{level:"warn",detail:"limiet bereikt, probeer het over een minuut opnieuw"}:{level:"fail",detail:"geen van beide zoekdiensten bereikbaar"}):r.items.length?{level:"ok",detail:`werkt via ${r.src}, ${r.items.length} resultaten voor pindakaas`}:{level:"warn",detail:`${r.src} bereikbaar, maar geen resultaten voor pindakaas`});
+    }
     x=await diagFetch(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${DIAG_EAN}&size=1`);
     add("Open Prices",x.problem||(x.json&&Array.isArray(x.json.items)?{level:"ok",detail:`bereikbaar, ${pl(x.json.total!=null?x.json.total:x.json.items.length,"prijs","prijzen")} voor het testproduct`}:{level:"fail",detail:"antwoord onleesbaar"}));
     try{
@@ -1240,6 +1338,57 @@ $("diagCopy").addEventListener("click",async()=>{
   const t=Diag.report(diagRes,{version:window.APP_VERSION||"ontwikkelversie",ua:navigator.userAgent||"",at:new Date().toLocaleString("nl-NL")});
   try{await navigator.clipboard.writeText(t);toast("Gekopieerd. Plak het in een bericht.")}catch(e){toast("Kopiëren lukt niet op dit apparaat")}
 });
+
+/* ---------- Zoeken op naam ---------- */
+const SEARCH=HEALTH&&typeof Search!=="undefined";
+let sIndex=null,sIndexFor=null,sT=0,sSeq=0;const offCache=new Map();
+async function searchIndex(){const ch=await loadCjb();if(sIndexFor!==ch){sIndex=Search.buildIndex(ch,k=>Shops.chainInfo(k).name);sIndexFor=ch}return sIndex}
+function clearSearch(){sSeq++;clearTimeout(sT);$("searchOut").innerHTML=""}
+const pickHint=`<p class="mut" style="margin:8px 0 0">Druk op Zoek voor alle voedingsmiddelen, ook buiten de supermarkt.</p>`;
+function localHTML(res,err){
+  if(err)return `<p class="mut">Supermarktdata niet bereikbaar. Druk op Zoek om in Open Food Facts te zoeken.</p>`;
+  if(!res.length)return `<p class="mut">Niet gevonden in de supermarktdata. Druk op Zoek om alle voedingsmiddelen te doorzoeken.</p>`;
+  return `<h3>In de supermarkt</h3>`+res.map(g=>`<button class="sr" data-sq="${esc(g.q)}"><span><strong>${esc(g.name)}</strong><span class="sub">${esc(g.size)}</span></span><span class="r">${g.shops>1?`vanaf ${eur(g.minPrice)}<span class="sub">${g.shops} winkels</span>`:`${eur(g.minPrice)} · ${esc(g.cheapest)}`}</span></button>`).join("");
+}
+async function localSearch(q,max){try{return {res:Search.searchLocal(await searchIndex(),q,{max})}}catch(e){return {res:[],err:true}}}
+async function liveSearch(){
+  const q=$("eanInput").value.trim(),my=++sSeq;
+  if(!SEARCH||q.length<2||/^\d+$/.test(q)){$("searchOut").innerHTML="";return}
+  const {res,err}=await localSearch(q,8);
+  if(my!==sSeq)return;
+  $("searchOut").innerHTML=`<div class="sres">${localHTML(res,err)}${res.length?pickHint:""}</div>`;
+}
+// Open Food Facts op naam: eerst de nieuwe zoekdienst, bij een fout of niets gevonden de oude. Alleen geslaagde zoekopdrachten worden bewaard.
+async function offNameSearch(q){
+  const key=q.toLowerCase();if(offCache.has(key))return offCache.get(key);
+  let rate=false,got=null;
+  for(const u of Search.offUrls(q)){
+    let r;try{r=await withTimeout(fetch(u.url))}catch(e){continue}
+    if(r.status===429){rate=true;continue}
+    if(!r.ok)continue;
+    let items=null;try{items=Search.parseOff(await r.json())}catch(e){}
+    if(items==null)continue;
+    got={items,src:u.src};if(items.length)break;
+  }
+  if(!got)return {error:true,rate};
+  offCache.set(key,got);return got;
+}
+const offRow=x=>`<button class="sr" data-code="${esc(x.code)}"><span><strong>${esc(x.name)}</strong><span class="sub">${esc([x.brand,x.qty].filter(Boolean).join(" · "))}${x.verdict==="ja"?" · ✓ past bij je voorkeuren":x.verdict==="nee"?` · ⚠ ${esc(x.issues.filter(i=>i.kind==="nee").map(i=>i.text).join(", "))}`:x.verdict==="onbekend"?" · ? niet zeker of het past":""}</span></span><span class="r">${x.grade?gradeBadge(x.grade):`<span class="sub">geen Nutri-Score</span>`}</span></button>`;
+async function fullSearch(q){
+  const my=++sSeq;clearTimeout(sT);
+  const {res,err}=await localSearch(q,6);
+  if(my!==sSeq)return;
+  const head=`<div class="sres">${res.length||err?localHTML(res,err):""}<h3>Alle voedingsmiddelen</h3>`;
+  const cmp=`<button class="sr" data-q="${esc(q)}"><span><strong>Prijzen vergelijken voor ‘${esc(q)}’</strong><span class="sub">zoekt per supermarkt het best passende product</span></span><span class="r">›</span></button></div>`;
+  $("searchOut").innerHTML=head+`<p class="mut">Zoeken bij Open Food Facts…</p>`+cmp;
+  const r=await offNameSearch(q);
+  if(my!==sSeq)return;
+  let body;
+  if(r.error)body=`<p class="mut">${r.rate?"Open Food Facts staat 10 zoekopdrachten per minuut toe. Probeer het over een minuut opnieuw.":"Zoeken bij Open Food Facts lukt nu niet. Probeer het later opnieuw."}</p>`;
+  else if(!r.items.length)body=`<p class="mut">Niets gevonden bij Open Food Facts.</p>`;
+  else body=Search.rankForPrefs(r.items,prefsOn()?prefs:null).slice(0,10).map(offRow).join("")+`<p class="mut" style="margin:6px 0 0">Uit Open Food Facts, door vrijwilligers ingevuld. Tik op een product voor prijzen, Nutri-Score en allergenen.</p>`;
+  $("searchOut").innerHTML=head+body+cmp;
+}
 
 /* ---------- Back-up ---------- */
 const BACKUP=typeof Backup!=="undefined";
@@ -1465,7 +1614,17 @@ $("shop").addEventListener("change",()=>{const n=$("shop").value==="__new";$("ne
 $("startBtn").addEventListener("click",startCam);
 $("stopBtn").addEventListener("click",stopCam);
 $("photo").addEventListener("change",e=>{const f=e.target.files[0];if(f)scanPhoto(f);e.target.value=""});
-$("eanForm").addEventListener("submit",e=>{e.preventDefault();lookup($("eanInput").value.trim())});
+$("eanForm").addEventListener("submit",e=>{
+  e.preventDefault();const q=$("eanInput").value.trim();if(!q)return;
+  if(/^\d+$/.test(q)){clearSearch();lookup(q);return}
+  if(!SEARCH){lookup("",q);return}
+  fullSearch(q);
+});
+$("eanInput").addEventListener("input",()=>{clearTimeout(sT);sT=setTimeout(liveSearch,200)});
+$("searchOut").addEventListener("click",e=>{
+  const b=(e.target.closest&&e.target.closest("button"))||e.target,d=b.dataset||{};
+  if(d.sq){clearSearch();lookup("",d.sq)}else if(d.code){clearSearch();lookup(d.code)}else if(d.q){clearSearch();lookup("",d.q)}
+});
 $("nameForm").addEventListener("submit",e=>{
   e.preventDefault();const q=$("nameInput").value.trim();if(!q)return;
   const code=current&&current.code;
