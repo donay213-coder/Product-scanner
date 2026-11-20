@@ -73,7 +73,10 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 #prefsSummary{margin-left:6px;font-weight:400}
 .alg{margin-top:10px;font-size:15px}.alg .hit{color:var(--red);font-weight:800}
 .linkbtn{background:none;border:0;padding:0 4px;min-height:44px;display:inline-flex;align-items:center;text-decoration:underline;color:inherit;font:inherit;cursor:pointer}
-.warnx{color:var(--red);font-weight:700}.oldr{padding:8px 0;border-bottom:1px solid var(--line)}.oldr:last-child{border:0}.oldr .pp{font-weight:700;margin-top:2px}
+.warnx{color:var(--red);font-weight:700}.osec{padding:10px 0 4px;border-top:1px solid var(--line);margin-top:10px}.osec h3{font-size:17px;margin:2px 0 6px}
+.olist{margin:4px 0;padding-left:20px}.olist li{margin:8px 0}.olist a{color:inherit}
+a.btn{text-decoration:none}a.btn.pri{background:var(--ink);color:var(--bg)}
+.oldr{padding:8px 0;border-bottom:1px solid var(--line)}.oldr:last-child{border:0}.oldr .pp{font-weight:700;margin-top:2px}
 .hpanel{margin:6px 0 2px;padding:6px 10px;border-left:3px solid var(--line)}
 .trend{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.spark{flex:none}.okx{color:#038141;font-weight:700}
 .pref{margin-top:10px;padding:9px 12px;border-radius:10px;font-size:15px;font-weight:600}
@@ -280,6 +283,12 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <button id="listClearAll">Lijstje leegmaken</button>
     <button id="shopDel" hidden>Winkel verwijderen</button>
   </div>
+  <div class="card" id="orderCard" hidden style="margin-top:12px">
+    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Bestellen</p>
+    <p class="mut" style="margin:0 0 8px">Zet al je lijstjes in één keer klaar bij de webshops van de winkels.</p>
+    <button class="pri" id="orderBtn" type="button" aria-expanded="false">Alle lijstjes bestellen</button>
+    <div id="orderOut" aria-live="polite"></div>
+  </div>
   <div class="card" id="backupCard" hidden style="margin-top:12px">
     <p style="margin:0 0 4px;font-weight:800;font-size:18px">Back-up</p>
     <p class="mut" style="margin:0 0 8px">Lijstjes, eigen prijzen, winkels en voorkeuren staan alleen op dit apparaat. Maak een back-up (bijvoorbeeld in iCloud Drive of je mail) en zet die terug op een ander apparaat of na het wissen van je browser.</p>
@@ -299,7 +308,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-bb4257e";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-19ee465";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -1011,6 +1020,47 @@ function compareThenNow(thenMatches, nowMatches) {
 }
 const API = { commitsUrl, pickCommit, snapshotUrls, snapshotFresh, compareThenNow };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.History = API;
+
+})();</script>
+<script>(function(){
+'use strict';
+// Bestellen: per winkel de beste manier om je lijstje in de webshop te krijgen.
+// Albert Heijn: één link die alles in je AH-winkelmandje zet. Jumbo: per product een link naar de productpagina.
+// Andere ketens: zoeklinks. Eigen winkels en tankstations: niet online. De app logt nergens in en rekent niets af.
+const S = typeof module !== 'undefined' && module.exports ? require('./shops') : globalThis.Shops;
+
+function ahProductId(link) { const m = /^wi(\d+)(\/|$)/.exec(String(link || '')); return m ? m[1] : null; }
+function ahCartUrl(items) {
+  const qty = new Map();
+  for (const it of items || []) if (it && it.id) qty.set(it.id, (qty.get(it.id) || 0) + (it.qty || 1));
+  if (!qty.size) return null;
+  return 'https://www.ah.nl/mijnlijst/add-multiple?' + [...qty].map(([id, n]) => `p=${id}:${n}`).join('&');
+}
+const jumboProductUrl = (link) => (/^[A-Za-z0-9][A-Za-z0-9,%-]*$/.test(String(link || '')) ? `https://www.jumbo.com/producten/${link}` : null);
+function chainKeyByName(name) { for (const [k, c] of Object.entries(S.CHAINS)) if (c.name === name) return k; return null; }
+
+const ORDER = { cart: 0, links: 1, search: 2, app: 3, offline: 4 };
+// lists: {winkel: [items]}; findLink(ketenKey, item) geeft de productlink uit de supermarktdata (alleen bij een zekere koppeling) of null.
+function orderPlan(lists, findLink) {
+  const out = [];
+  for (const [shop, arr] of Object.entries(lists || {})) {
+    const todo = (arr || []).filter((x) => x && !x.done);
+    if (!todo.length) continue;
+    const key = chainKeyByName(shop), c = key ? S.CHAINS[key] : null;
+    const mode = key === 'ah' ? 'cart' : key === 'jumbo' ? 'links' : key === 'picnic' ? 'app' : c && c.search ? 'search' : 'offline';
+    const items = todo.map((x) => {
+      const link = mode === 'cart' || mode === 'links' ? findLink(key, x) : null;
+      const id = mode === 'cart' ? ahProductId(link) : null, prod = mode === 'links' ? jumboProductUrl(link) : null;
+      const found = !!(id || prod);
+      return { name: x.name, qty: x.qty || 1, id, found, url: prod || (c && c.search ? c.search(x.name) : null) };
+    });
+    out.push({ shop, key, mode, items, cartUrl: mode === 'cart' ? ahCartUrl(items.filter((i) => i.id)) : null });
+  }
+  return out.map((s, i) => [s, i]).sort(([a, i], [b, j]) => ORDER[a.mode] - ORDER[b.mode] || i - j).map(([s]) => s);
+}
+
+const API = { ahProductId, ahCartUrl, jumboProductUrl, chainKeyByName, orderPlan };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Order = API;
 
 })();</script>
 <script>
@@ -1795,6 +1845,41 @@ $("listShare").addEventListener("click",async()=>{
 });
 $("best").addEventListener("click",e=>{const i=e.target.dataset?.add;if(i!=null&&i!=="")addToList(current.rows[+i])});
 renderLists();
+
+/* ---------- Bestellen: alle lijstjes in één overzicht ---------- */
+const ORDERING=typeof Order!=="undefined"&&HAS_MATCH;
+let orderShown=false;
+$("orderCard").hidden=!ORDERING;
+const oLink=(url,text,cls)=>`<a ${cls?`class="${cls}" `:""}href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${text}</a>`;
+const oQty=i=>i.qty>1?`${i.qty}× `:"";
+function orderSection(s){
+  const n=s.items.length,head=`<h3>${esc(s.shop)} <span class="mut">· ${n} ${n===1?"product":"producten"}</span></h3>`;
+  const list=(withLinks,note)=>`<ul class="olist">${s.items.map(i=>`<li>${withLinks&&i.url?oLink(i.url,oQty(i)+esc(i.name)):oQty(i)+esc(i.name)}${note&&!i.found?' <span class="mut">(zoekresultaten)</span>':""}</li>`).join("")}</ul>`;
+  if(s.mode==="cart"){
+    const found=s.items.filter(i=>i.found),miss=s.items.filter(i=>!i.found);
+    return `<div class="osec">${head}${s.cartUrl?oLink(s.cartUrl,`Alles in je AH-winkelmandje (${found.length} van ${n} producten)`,"btn pri"):""}${s.cartUrl?`<p class="mut">Opent ah.nl. Staan de producten er niet meteen in, tik daar dan op de knop om ze toe te voegen.</p>`:""}${miss.length?`<p class="mut">Niet gevonden op ah.nl, zoek zelf:</p><ul class="olist">${miss.map(i=>`<li>${oLink(i.url,oQty(i)+esc(i.name))}</li>`).join("")}</ul>`:""}</div>`;
+  }
+  if(s.mode==="links")return `<div class="osec">${head}<p class="mut">Jumbo heeft geen knop om alles tegelijk toe te voegen. Tik op elk product en kies daar "In winkelmandje".</p>${list(true,true)}</div>`;
+  if(s.mode==="search")return `<div class="osec">${head}<p class="mut">Zoek elk product in de webshop van ${esc(s.shop)}:</p>${list(true,false)}</div>`;
+  if(s.mode==="app")return `<div class="osec">${head}<p class="mut">Bestel deze producten in de app van ${esc(s.shop)}:</p>${list(false,false)}</div>`;
+  return `<div class="osec">${head}<p class="mut">Niet online te bestellen. Neem dit lijstje mee naar de winkel:</p>${list(false,false)}</div>`;
+}
+async function showOrder(){
+  if(orderShown){orderShown=false;$("orderOut").innerHTML="";$("orderBtn").setAttribute("aria-expanded","false");return}
+  orderShown=true;$("orderBtn").setAttribute("aria-expanded","true");$("orderOut").innerHTML=`<p class="mut">Bezig…</p>`;
+  let chains=null;try{chains=await loadCjb()}catch(e){}
+  if(!orderShown)return;
+  // Alleen een zekere koppeling gaat het winkelmandje in; anders een zoeklink.
+  const findLink=(key,it)=>{
+    const c=chains&&chains.find(x=>x.key===key);if(!c)return null;
+    const m=Match.findMatches([c],Match.buildQuery(it.mq?it.mq:it.q?{q:it.q}:{q:it.name}))[0];
+    return m&&m.confidence==="hoog"?m.link:null;
+  };
+  const plan=Order.orderPlan(lists,findLink);
+  $("orderOut").innerHTML=!plan.length?`<p class="mut">Er staat niets op je lijstjes om te bestellen.</p>`
+    :(chains?"":`<p class="mut">Supermarktdata niet bereikbaar: je krijgt zoeklinks in plaats van productlinks.</p>`)+plan.map(orderSection).join("")+`<p class="mut" style="margin-top:10px">Je rekent af in de webshop van de winkel: daar log je in en kies je een bezorg- of ophaalmoment. Prijzen kunnen afwijken van wat de app toont.</p>`;
+}
+$("orderBtn").addEventListener("click",showOrder);
 
 $("shop").addEventListener("change",()=>{const n=$("shop").value==="__new";$("newShop").hidden=!n;if(n)$("newShop").focus()});
 $("startBtn").addEventListener("click",startCam);
