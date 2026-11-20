@@ -294,7 +294,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-b1d52fe";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-5d76539";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -1344,7 +1344,7 @@ async function runDiag(){
     add("Open Food Facts zoeken",x.problem||Diag.checkSearch(x.json,allowed));
     if(typeof Search!=="undefined"){
       const r=await offNameSearch("pindakaas");
-      add("Open Food Facts zoeken op naam",r.error?(r.rate?{level:"warn",detail:"limiet bereikt, probeer het over een minuut opnieuw"}:{level:"fail",detail:"geen van beide zoekdiensten bereikbaar"}):r.items.length?{level:"ok",detail:`werkt via ${r.src}, ${r.items.length} resultaten voor pindakaas`}:{level:"warn",detail:`${r.src} bereikbaar, maar geen resultaten voor pindakaas`});
+      add("Open Food Facts zoeken op naam",r.error?(r.rate?{level:"warn",detail:"limiet bereikt, probeer het over een minuut opnieuw"}:{level:"fail",detail:"geen van beide zoekdiensten bereikbaar"}):r.items.length?{level:"ok",detail:`werkt via ${r.src}, ${r.items.length===1?"1 resultaat":r.items.length+" resultaten"} voor pindakaas${r.why&&r.why.length?` (${r.why.join("; ")})`:""}`}:{level:"warn",detail:`${r.src} bereikbaar, maar geen resultaten voor pindakaas`});
     }
     x=await diagFetch(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${DIAG_EAN}&size=1`);
     add("Open Prices",x.problem||(x.json&&Array.isArray(x.json.items)?{level:"ok",detail:`bereikbaar, ${pl(x.json.total!=null?x.json.total:x.json.items.length,"prijs","prijzen")} voor het testproduct`}:{level:"fail",detail:"antwoord onleesbaar"}));
@@ -1387,19 +1387,25 @@ async function liveSearch(){
   $("searchOut").innerHTML=`<div class="sres">${localHTML(res,err)}${res.length?pickHint:""}</div>`;
 }
 // Open Food Facts op naam: eerst de nieuwe zoekdienst, bij een fout of niets gevonden de oude. Alleen geslaagde zoekopdrachten worden bewaard.
+// Werkt de nieuwe dienst niet en de oude wel, dan slaat de app de nieuwe de rest van de sessie over (scheelt een verloren verzoek per zoekopdracht).
+let salOff=false;
 async function offNameSearch(q){
   const key=q.toLowerCase();if(offCache.has(key))return offCache.get(key);
-  let rate=false,got=null;
+  let rate=false,got=null;const why=[];
   for(const u of Search.offUrls(q)){
-    let r;try{r=await withTimeout(fetch(u.url))}catch(e){continue}
-    if(r.status===429){rate=true;continue}
-    if(!r.ok)continue;
+    if(salOff&&u.src==="search.openfoodfacts.org")continue;
+    let r;try{r=await withTimeout(fetch(u.url))}catch(e){why.push(`${u.src}: ${e.message==="timeout"?"geen antwoord binnen 20 seconden":"niet bereikbaar"}`);continue}
+    if(r.status===429){rate=true;why.push(`${u.src}: limiet bereikt`);continue}
+    if(!r.ok){why.push(`${u.src}: fout ${r.status}`);continue}
     let items=null;try{items=Search.parseOff(await r.json())}catch(e){}
-    if(items==null)continue;
-    got={items,src:u.src};if(items.length)break;
+    if(items==null){why.push(`${u.src}: antwoord onleesbaar`);continue}
+    if(!items.length)why.push(`${u.src}: geen resultaten`);
+    if(!got||items.length)got={items,src:u.src};
+    if(items.length)break;
   }
-  if(!got)return {error:true,rate};
-  offCache.set(key,got);return got;
+  if(!got)return {error:true,rate,why};
+  if(got.items.length&&got.src!=="search.openfoodfacts.org")salOff=true;
+  got.why=why;offCache.set(key,got);return got;
 }
 const offRow=x=>`<button class="sr" data-code="${esc(x.code)}"><span><strong>${esc(x.name)}</strong><span class="sub">${esc([x.brand,x.qty].filter(Boolean).join(" · "))}${x.verdict==="ja"?" · ✓ past bij je voorkeuren":x.verdict==="nee"?` · ⚠ ${esc(x.issues.filter(i=>i.kind==="nee").map(i=>i.text).join(", "))}`:x.verdict==="onbekend"?" · ? niet zeker of het past":""}</span></span><span class="r">${x.grade?gradeBadge(x.grade):`<span class="sub">geen Nutri-Score</span>`}</span></button>`;
 async function fullSearch(q){
