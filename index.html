@@ -16,7 +16,7 @@
    PICTURE: de camerazoeker met scanlijn, daarna het etiket met de laagste prijs
    COLOUR and TYPE: wit/zwart, etiketgeel #ffd400, rood #d7261e voor duurder; systeemlettertype (geen externe lettertypes, privacy)
    LAYOUT: één kolom, max 640px, duim-vriendelijk */
-:root{color-scheme:light dark;--bg:light-dark(#f2f0ec,#121212);--card:light-dark(#fff,#1d1d1d);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#666,#a5a5a5);--line:light-dark(#dedad3,#333);--tag:#ffd400;--red:#d7261e;--ok:#0a7a3d}
+:root{color-scheme:light dark;--bg:light-dark(#f2f0ec,#121212);--card:light-dark(#fff,#1d1d1d);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#666,#a5a5a5);--line:light-dark(#dedad3,#333);--tag:#ffd400;--red:#d7261e;--ok:light-dark(#0a7a3d,#5fd08f)}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow-x:clip}
@@ -115,6 +115,86 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 .hist button{min-height:40px;font-weight:400;font-size:14px;border-color:var(--line)}
 .msg{padding:12px 14px;border-radius:10px;background:var(--card);border:1px dashed var(--line);font-size:15px}
 .err{border-color:var(--red)}
+
+/* ===== Nieuwe opzet (21-11-2026): simpel, overzichtelijk, praktisch ===== */
+main{padding:12px 16px calc(104px + env(safe-area-inset-bottom))}
+header{padding:4px 0 10px}
+h1{font-size:24px;letter-spacing:-.5px}
+.card{border:0;border-radius:16px}
+.ch{font-size:15px;font-weight:800;margin:0 0 4px}
+.vhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 12px}.vhead h2{margin:0;font-size:26px}
+button.sq{width:48px;min-width:48px;padding:0;justify-content:center;flex:none}
+button.ghost{border:0;background:none;color:var(--ink)}
+#result>*+*,#listView>*+*,#moreView>*+*{margin-top:12px}
+/* tabbalk */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:7;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:640px;margin:0 auto;background:var(--card);border-top:1px solid var(--line);padding:6px 8px calc(8px + env(safe-area-inset-bottom))}
+.tabbar button{flex-direction:column;justify-content:center;gap:2px;border:0;background:none;min-height:56px;padding:0;font-size:13px;font-weight:600;color:var(--mut)}
+.tabbar .ti{position:relative;display:flex;padding:4px 18px;border-radius:99px}
+.tabbar button[aria-pressed=true]{color:var(--ink);font-weight:800}.tabbar button[aria-pressed=true] .ti{background:var(--tag);color:#111}
+#listCount:empty{display:none}#listCount{position:absolute;top:-4px;right:6px;background:var(--ink);color:var(--card);font-size:11px;font-weight:800;border-radius:99px;padding:0 6px;line-height:18px}
+.toast{bottom:calc(92px + env(safe-area-inset-bottom))}
+/* scannen */
+#eanForm input{min-height:52px;border-radius:12px;font-size:17px}#eanForm button{min-height:52px;border-radius:12px}
+.view{border-radius:20px;margin-top:12px}
+.scanrow{display:flex;flex-direction:column;align-items:stretch;gap:4px;margin-top:12px}
+.scanbtn{min-height:58px;border-radius:14px;border:0;background:var(--tag);color:#111;font-weight:800;font-size:18px;justify-content:center;gap:10px}
+#stopBtn{justify-content:center}
+.photolink{min-height:44px;display:flex;align-items:center;justify-content:center;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.backbar{display:flex;align-items:center;justify-content:space-between;margin:-4px -8px 4px}
+.backbar #newScan{font-weight:700;padding:0 8px;gap:4px}
+/* product */
+.prodcard{padding:2px 2px 0}
+.prod{grid-template-columns:64px minmax(0,1fr)}.prod img,.prod .ph{width:64px;height:64px;border-radius:12px}
+.prod h3{font-size:21px;font-weight:800}
+.grades{margin-top:8px;gap:6px 12px}
+.alg{margin-top:8px;font-size:14px}
+.fixname{font-size:14px;color:var(--mut);margin-top:4px!important}
+.answer{background:var(--tag);color:#111;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.arow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.alab{font-size:14px;font-weight:600}
+.answer .where{font-size:26px;font-weight:800;line-height:1.1}.answer .place{display:block;font-size:13px;font-weight:600}
+.answer .big{font-size:clamp(34px,10vw,44px);font-weight:900;letter-spacing:-1px;line-height:1;white-space:nowrap}
+.asub{font-size:14px}
+.abtn{min-height:52px;border-radius:12px;border:0;background:#111;color:#fff;font-weight:800;font-size:17px;justify-content:center}
+.list li{grid-template-columns:minmax(0,1fr) auto 44px;align-items:center;gap:2px 12px;padding:10px 0}
+.list li strong{font-size:17px}.list .sub{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.addi{width:44px;height:44px;padding:0;justify-content:center;border-radius:99px;border:1.5px solid var(--line)}
+.list li:first-child .addi{border-color:var(--ink)}
+.addi:active,.addall:active{background:var(--tag);color:#111;border-color:var(--tag)}
+.src{font-size:11px;padding:0 7px}
+.srcinfo summary{min-height:40px;font-size:13px;font-weight:400;color:var(--mut)}.srcinfo p{margin:0 0 6px}
+.save:has(>#house:empty):has(>#others:empty):has(>#oldWrap[hidden]):has(>#altWrap[hidden]){display:none}
+.save .oth{margin-top:0;padding-top:0}.save>#house .oth{border-top:0}.save .oth summary{font-size:16px;font-weight:700;min-height:56px}
+.save .tip{margin:6px 0}
+.save #oldWrap .row,.save #altWrap{margin-top:0;border-top:1px solid var(--line)}
+#oldBtn,#altBtn{width:100%;justify-content:space-between;border:0;border-radius:0;background:none;padding:0;min-height:56px;font-weight:700;margin-top:0!important}
+#oldBtn::after,#altBtn::after{content:"›";font-size:24px;font-weight:400;color:var(--mut)}
+#oldWrap .row{flex-wrap:nowrap;gap:0}#oldWrap .row .mut{display:none}
+.more summary{font-weight:700}.more h3{font-size:15px;margin:16px 0 8px}
+/* lijstjes */
+.schips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.schips::-webkit-scrollbar{display:none}
+.schips button{flex:none;min-height:40px;border-radius:99px;border:1.5px solid var(--line);font-weight:700;padding:0 14px;gap:6px}
+.schips button[aria-pressed=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.schips .n{font-size:12px;font-weight:800;opacity:.75;pointer-events:none}
+.schips .addshop{border-style:dashed;color:var(--mut)}
+#shopPanel{display:grid;gap:8px}#shopPanel select{width:100%}
+.addrow{display:grid;grid-template-columns:minmax(0,1fr) 92px 50px;gap:8px}.addrow input{min-height:50px;border-radius:12px}.addrow button{min-height:50px;width:50px;border-radius:12px;border:0;background:var(--tag);color:#111}
+.rbar{display:flex;align-items:center;justify-content:space-between;gap:10px}.rbar button{min-height:40px;border-color:var(--line)}
+.quiet button{border-color:var(--line);font-weight:600;font-size:15px}
+/* meer */
+#moreView .card>summary,#prefsBox>summary{font-weight:700}
+.setting{min-height:56px;font-weight:600}
+
+.pairans{gap:8px;font-size:15px}.pairans .pick{font-size:14px}.pairans .abtn{margin-top:4px}
+.morerows summary{font-weight:700;min-height:48px}
+.li{grid-template-columns:40px minmax(0,1fr) auto;align-items:start}.li .nm strong{font-size:16px}
+.li>div:last-child{display:flex;flex-direction:column-reverse;align-items:flex-end;gap:6px}
+.chk{width:40px;min-height:40px;border:0;background:none;font-size:26px;line-height:1;padding:0}
+.qty{gap:6px}.qty button{width:34px;min-height:34px;border-radius:99px;border-color:var(--line);font-size:18px}
+.lt{font-size:16px}
+.alg{font-size:14px;line-height:1.4}#allergens .mut{font-size:13px}#allergens .linkbtn{min-height:36px;font-size:14px;padding:0}
+#oldBtn,#altBtn{text-align:left}
+.ph,.prod .ph{background:light-dark(#fff,#2a2a2a)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -122,17 +202,13 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <main>
 <div id="updBar" class="upd" role="status" hidden></div>
 <div id="importBar" class="upd" role="status" hidden></div>
-<header><h1>Prijs<span>scanner</span></h1><span class="mut">Scan, vergelijk, bespaar</span></header>
-<nav class="tabs" aria-label="Weergave">
-  <button id="tabScan" aria-pressed="true">Scannen</button>
-  <button id="tabList" aria-pressed="false">Lijstjes <span id="listCount"></span></button>
-</nav>
+<header><h1>Prijs<span>scanner</span></h1></header>
 <div id="scanView">
 
-<section>
+<section id="scanBox">
   <form class="ean" id="eanForm" role="search" style="margin-top:0">
     <input id="eanInput" type="search" enterkeyhint="search" autocomplete="off" placeholder="Zoek product of barcode" aria-label="Zoek een product op naam of barcode">
-    <button class="pri" type="submit">Zoek</button>
+    <button class="pri sq" type="submit" aria-label="Zoek"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button>
   </form>
   <div id="searchOut" aria-live="polite"></div>
   <div class="view" id="view">
@@ -143,59 +219,117 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
       Richt de camera op de streepjescode van een product
     </div>
   </div>
-  <div class="row">
-    <button class="pri" id="startBtn">Camera starten</button>
+  <div class="scanrow">
+    <button class="scanbtn" id="startBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9v6M11 9v6M14 9v6M17 9v6"/></svg> Scan een product</button>
     <button id="stopBtn" hidden>Stoppen</button>
-    <label class="btn" for="photo">Foto kiezen</label>
+    <label class="photolink" for="photo">of kies een foto van de barcode</label>
     <input type="file" id="photo" accept="image/*" capture="environment" hidden>
   </div>
   <p class="msg err" id="err" hidden></p>
 </section>
+<div class="backbar" id="backBar" hidden><button class="ghost" id="newScan" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg> Nieuwe scan</button><button class="ghost sq" id="searchAgain" type="button" aria-label="Zoeken"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button></div>
+
 
 <section id="result" hidden>
-  <h2>Product</h2>
-  <div class="card">
+  <div class="prodcard">
     <div class="prod" id="prod"></div>
     <div class="grades" id="grades"></div>
     <div id="allergens"></div>
     <div id="prefBadge"></div>
-    <div id="best"></div>
-    <div id="altWrap" hidden>
-      <button id="altBtn" type="button" style="margin-top:10px">Gezondere keuzes in dezelfde categorie</button>
-      <div id="altOut" aria-live="polite"></div>
-    </div>
   </div>
   <form class="ean" id="nameForm">
     <input id="nameInput" placeholder="Product onbekend of fout? Typ de naam, bv. Calvé pindakaas 650 g" aria-label="Productnaam">
     <button type="submit">Zoek</button>
   </form>
-
-  <h2>Prijzen per winkel</h2>
-  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p><div id="house"></div><div id="others"></div>
-    <div id="oldWrap" hidden><div class="row" style="align-items:center"><button id="oldBtn" type="button">Prijzen van een maand geleden</button><span class="mut">eenmalig ongeveer 2 MB</span></div><div id="oldOut" aria-live="polite"></div></div>
+  <button class="linkbtn fixname" id="fixName" type="button" hidden>Verkeerd product? Zoek op naam</button>
+  <div id="best"></div>
+  <div class="card">
+    <h2 class="ch">Alle winkels</h2>
+    <ul class="list" id="prices"></ul>
+    <details class="srcinfo"><summary>Over deze prijzen</summary><p class="mut" id="pricesNote"></p></details>
   </div>
-
-  <h2>Prijs toevoegen</h2>
-  <form class="add card" id="addForm">
+  <div class="card save">
+    <h2 class="ch">Bespaar meer</h2>
+    <div id="house"></div><div id="others"></div>
+    <div id="oldWrap" hidden><div class="row" style="align-items:center"><button id="oldBtn" type="button">Prijzen van een maand geleden</button><span class="mut">eenmalig ongeveer 2 MB</span></div><div id="oldOut" aria-live="polite"></div></div>
+    <div id="altWrap" hidden>
+      <button id="altBtn" type="button" style="margin-top:10px">Gezondere keuzes in dezelfde categorie</button>
+      <div id="altOut" aria-live="polite"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2 class="ch">In de aanbieding?</h2>
+    <p class="mut" style="margin:0 0 10px">Bekijk de actie van deze week bij de winkel zelf.</p>
+    <div class="chips" id="promos"></div>
+  </div>
+  <details class="card more">
+    <summary>Meer opties</summary>
+    <h3>Zelf een prijs invoeren</h3>
+    <form class="add" id="addForm">
     <select id="shop" aria-label="Winkel"></select>
     <input id="newShop" hidden placeholder="Naam van de winkel" aria-label="Naam van de nieuwe winkel" style="grid-column:1/-1" maxlength="40">
     <input id="price" inputmode="decimal" placeholder="Prijs, bv. 2,49" aria-label="Prijs in euro" required>
     <button class="pri" type="submit">Opslaan</button>
   </form>
-  <p class="mut">Prijzen die je zelf invoert worden op dit apparaat bewaard en tellen mee in de vergelijking.</p>
-
-  <h2>Acties en kortingen</h2>
-  <div class="chips" id="promos"></div>
-  <p class="mut">Weekacties wisselen vaak; de links openen de actuele aanbiedingenpagina's.</p>
-
-  <h2>Zoek in de supermarkt</h2>
-  <div class="chips" id="chips"></div>
-
-  <h2>Webshops en prijsvergelijkers</h2>
-  <div class="chips" id="webshops"></div>
+    <p class="mut">Prijzen die je zelf invoert worden op dit apparaat bewaard en tellen mee in de vergelijking.</p>
+    <h3>Zoek in de supermarkt</h3>
+    <div class="chips" id="chips"></div>
+    <h3>Webshops en prijsvergelijkers</h3>
+    <div class="chips" id="webshops"></div>
+  </details>
 </section>
 
-<section id="prefsWrap" hidden>
+
+<section id="histWrap" hidden>
+  <h2>Eerder gescand</h2>
+  <div class="row hist" id="hist"></div>
+</section>
+
+</div>
+
+<section id="listView" hidden>
+  <div class="vhead"><h2>Lijstjes</h2><button class="ghost sq" id="listShare" type="button" aria-label="Deel lijstje"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></button></div>
+  <div class="schips" id="shopChips"></div>
+  <div class="card" id="shopPanel" hidden>
+    <label class="mut" for="listShop">Alle winkels</label>
+    <select id="listShop" aria-label="Winkel"></select>
+    <form class="ean" id="shopAdd">
+    <input id="shopName" placeholder="Nieuwe winkel, bv. Buurtsuper Jansen" aria-label="Naam van de nieuwe winkel" maxlength="40">
+    <button type="submit">Winkel toevoegen</button>
+  </form>
+    <button id="shopDel" hidden>Winkel verwijderen</button>
+  </div>
+  <form class="addrow" id="listAdd">
+    <input id="liName" placeholder="Product toevoegen" aria-label="Product" required>
+    <input id="liPrice" inputmode="decimal" placeholder="€ prijs" aria-label="Prijs in euro">
+    <button class="pri sq" type="submit" aria-label="Toevoegen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+  </form>
+  <div class="rbar" id="refreshBar" hidden>
+    <span class="mut" id="refreshInfo" aria-live="polite"></span>
+    <button id="refreshBtn" type="button">↻ Prijzen verversen</button>
+  </div>
+  <div class="card"><div id="listItems"></div><div class="tot" id="listTotal"></div><p class="mut" id="listNote"></p></div>
+
+  <div class="card" id="basketCard" hidden style="margin-top:12px">
+    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Waar is je lijstje het goedkoopst?</p>
+    <label class="mut" style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="basketAll" style="width:22px;min-height:22px"> Alle lijstjes samen vergelijken</label>
+    <div id="basket"></div>
+  </div>
+  <div class="card" id="orderCard" hidden style="margin-top:12px">
+    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Bestellen</p>
+    <p class="mut" style="margin:0 0 8px">Zet al je lijstjes in één keer klaar bij de webshops van de winkels.</p>
+    <button class="pri" id="orderBtn" type="button" aria-expanded="false">Alle lijstjes bestellen</button>
+    <div id="orderOut" aria-live="polite"></div>
+  </div>
+  <div class="row quiet">
+    <button id="listClearDone">Gekochte weghalen</button>
+    <button id="listClearAll">Lijstje leegmaken</button>
+  </div>
+  <p class="mut">Lijstjes worden op dit apparaat bewaard en zijn niet gesynchroniseerd met andere apparaten.</p>
+</section>
+<section id="moreView" hidden>
+  <div class="vhead"><h2>Meer</h2></div>
+  <div id="prefsWrap" hidden>
   <details class="card" id="prefsBox">
     <summary>Mijn voorkeuren <span class="mut" id="prefsSummary"></span></summary>
     <label class="pl"><input type="checkbox" id="prefVeg"> Vegetarisch</label>
@@ -205,15 +339,8 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <div id="prefAlg"></div>
     <p class="mut" id="prefsNote">Gegevens van Open Food Facts (ODbL), ingevuld door vrijwilligers en vaak onvolledig. De app zegt alleen "past" als de gegevens dat duidelijk laten zien; ontbreken ze, dan staat er een vraagteken. Halal: "past" alleen met een halal-keurmerk volgens Open Food Facts; varkensvlees of alcohol in de ingrediënten geeft een waarschuwing, en zonder keurmerk staat er een vraagteken. Dit is geen medisch advies: controleer altijd de verpakking.</p>
   </details>
-</section>
-
-<section id="histWrap" hidden>
-  <h2>Eerder gescand</h2>
-  <div class="row hist" id="hist"></div>
-</section>
-
-<section id="aboutWrap">
-  <h2>Over deze app</h2>
+</div>
+  <div class="card"><label class="pl setting"><input type="checkbox" id="autoRefresh" style="width:22px;min-height:22px"> Prijzen op je lijstjes automatisch verversen als ze ouder zijn dan 12 uur</label></div>
   <div class="card" id="diagCard" hidden>
     <p style="margin:0 0 4px;font-weight:800;font-size:18px">Werkt alles?</p>
     <p class="mut" style="margin:0 0 8px">Test of de camera, de opslag en alle prijsbronnen op dit apparaat werken. Kost een paar kleine verzoeken, en de supermarktdata als die nog niet geladen was.</p>
@@ -222,7 +349,21 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <ul class="diag" id="diagOut"></ul>
     <button id="diagCopy" type="button" hidden>Kopieer resultaat</button>
   </div>
-  <details class="card" id="aboutBox" style="margin-top:12px">
+  <div class="card" id="backupCard" hidden style="margin-top:12px">
+    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Back-up</p>
+    <p class="mut" style="margin:0 0 8px">Lijstjes, eigen prijzen, winkels en voorkeuren staan alleen op dit apparaat. Maak een back-up (bijvoorbeeld in iCloud Drive of je mail) en zet die terug op een ander apparaat of na het wissen van je browser.</p>
+    <div class="row" style="margin:0">
+      <button id="bkExport" type="button">Back-up maken</button>
+      <label class="btn" for="bkFile">Back-up terugzetten</label>
+      <input type="file" id="bkFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="mut" id="bkMsg" aria-live="polite"></p>
+    <div id="bkConfirm" hidden>
+      <p id="bkSum" style="font-weight:600"></p>
+      <div class="row" style="margin:0"><button class="pri" id="bkYes" type="button">Vervangen</button><button id="bkNo" type="button">Annuleren</button></div>
+    </div>
+  </div>
+  <details class="card" id="aboutBox">
     <summary>Over deze app en privacy</summary>
     <h3>Wat de app doet</h3>
     <p>Prijsscanner zoekt bij een barcode of productnaam de prijzen op die openlijk beschikbaar zijn en laat zien waar het product het goedkoopst is. Supermarktprijzen zijn online prijzen en kunnen in de winkel anders zijn; weekacties (zoals de Bonus) staan er niet in. Prijzen zijn een indicatie.</p>
@@ -257,65 +398,16 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
     <p class="mut">Versie <span id="appVersion">ontwikkelversie</span></p>
   </details>
 </section>
-</div>
-
-<section id="listView" hidden>
-  <h2 style="margin-top:8px">Boodschappenlijstje per winkel</h2>
-  <select id="listShop" aria-label="Winkel" style="width:100%;margin-bottom:12px"></select>
-  <form class="ean" id="shopAdd" style="margin:0 0 12px">
-    <input id="shopName" placeholder="Nieuwe winkel, bv. Buurtsuper Jansen" aria-label="Naam van de nieuwe winkel" maxlength="40">
-    <button type="submit">Winkel toevoegen</button>
-  </form>
-  <form class="addform" id="listAdd">
-    <input id="liName" placeholder="Product, bv. halfvolle melk" aria-label="Product" required>
-    <input id="liPrice" inputmode="decimal" placeholder="Prijs (optioneel)" aria-label="Prijs in euro">
-    <button class="pri" type="submit">Toevoegen</button>
-  </form>
-  <div class="card" id="refreshBar" hidden style="margin-bottom:12px">
-    <div class="row" style="margin:0;align-items:center">
-      <button id="refreshBtn" class="pri" type="button">↻ Prijzen verversen</button>
-      <span class="mut" id="refreshInfo" aria-live="polite"></span>
-    </div>
-    <label class="mut" style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="autoRefresh" style="width:22px;min-height:22px"> Automatisch verversen als de prijzen ouder zijn dan 12 uur</label>
-  </div>
-  <div class="card"><div id="listItems"></div><div class="tot" id="listTotal"></div><p class="mut" id="listNote"></p></div>
-  <div class="card" id="basketCard" hidden style="margin-top:12px">
-    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Waar is je lijstje het goedkoopst?</p>
-    <label class="mut" style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="basketAll" style="width:22px;min-height:22px"> Alle lijstjes samen vergelijken</label>
-    <div id="basket"></div>
-  </div>
-  <div class="row">
-    <button id="listShare">Deel lijstje</button>
-    <button id="listClearDone">Gekochte weghalen</button>
-    <button id="listClearAll">Lijstje leegmaken</button>
-    <button id="shopDel" hidden>Winkel verwijderen</button>
-  </div>
-  <div class="card" id="orderCard" hidden style="margin-top:12px">
-    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Bestellen</p>
-    <p class="mut" style="margin:0 0 8px">Zet al je lijstjes in één keer klaar bij de webshops van de winkels.</p>
-    <button class="pri" id="orderBtn" type="button" aria-expanded="false">Alle lijstjes bestellen</button>
-    <div id="orderOut" aria-live="polite"></div>
-  </div>
-  <div class="card" id="backupCard" hidden style="margin-top:12px">
-    <p style="margin:0 0 4px;font-weight:800;font-size:18px">Back-up</p>
-    <p class="mut" style="margin:0 0 8px">Lijstjes, eigen prijzen, winkels en voorkeuren staan alleen op dit apparaat. Maak een back-up (bijvoorbeeld in iCloud Drive of je mail) en zet die terug op een ander apparaat of na het wissen van je browser.</p>
-    <div class="row" style="margin:0">
-      <button id="bkExport" type="button">Back-up maken</button>
-      <label class="btn" for="bkFile">Back-up terugzetten</label>
-      <input type="file" id="bkFile" accept="application/json,.json" hidden>
-    </div>
-    <p class="mut" id="bkMsg" aria-live="polite"></p>
-    <div id="bkConfirm" hidden>
-      <p id="bkSum" style="font-weight:600"></p>
-      <div class="row" style="margin:0"><button class="pri" id="bkYes" type="button">Vervangen</button><button id="bkNo" type="button">Annuleren</button></div>
-    </div>
-  </div>
-  <p class="mut">Lijstjes worden op dit apparaat bewaard en zijn niet gesynchroniseerd met andere apparaten.</p>
+<nav class="tabbar" aria-label="Hoofdmenu">
+  <button id="tabScan" aria-pressed="true"><span class="ti"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9v6M11 9v6M14 9v6M17 9v6"/></svg></span>Scannen</button>
+  <button id="tabList" aria-pressed="false"><span class="ti"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg><span id="listCount"></span></span>Lijstjes</button>
+  <button id="tabMore" aria-pressed="false"><span class="ti"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></span>Meer</button>
+</nav>
 </section>
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-70a94f4";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-75a40b0";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -1572,9 +1664,10 @@ async function lookup(code,q){
   if(!q&&!/^\d{6,14}$/.test(code)){showErr("Dat lijkt geen geldige barcode.");return}
   if(code&&!q&&names[code])q=names[code];
   showErr("");$("eanInput").value=code;$("result").hidden=false;
+  if(stream)stopCam();$("scanBox").hidden=true;$("backBar").hidden=false;$("nameForm").hidden=true;$("fixName").hidden=true;
   $("prod").innerHTML=`<div class="ph"></div><div><h3>Bezig met zoeken…</h3><div class="mut">${esc(q||"EAN "+code)}</div></div>`;
   $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";$("others").innerHTML="";$("house").innerHTML="";
-  $("result").scrollIntoView({behavior:"smooth",block:"start"});
+  if($("scanView").hidden)showTab("scan");else toTop();
   let d;
   try{d=await fetchData(code,q)}catch(e){showErr("Opzoeken mislukt: de server is niet bereikbaar.");return}
   if(code&&names[code]&&!(d.product&&d.product.name))d.product={...(d.product||{}),name:names[code],brand:"",qty:"",img:"",nutri:"",nova:"",eco:""};
@@ -1630,19 +1723,22 @@ function gradesHTML(p){
   if(e)out.push(`<span class="chip" title="Eco-Score: milieu-impact, A is het gunstigst">Eco-Score <b>${e.toUpperCase()}</b></span>`);
   return out.join("");
 }
+const PLUSSVG='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="pointer-events:none"><path d="M12 5v14M5 12h14"/></svg>';
 function render(){
   const d=current.data,p=d.product||{},title=p.name||(d.query&&!current.code?d.query:"Onbekend product");
   $("prod").innerHTML=`${p.img?`<img src="${esc(safeUrl(p.img))}" alt="">`:`<div class="ph"></div>`}<div><h3>${esc(title)}</h3><div class="mut">${esc([p.brand,p.qty].filter(Boolean).join(" · ")||(p.name?"":"Typ hieronder de naam om toch te vergelijken"))}</div>${current.code?`<div class="mut">EAN ${esc(current.code)}</div>`:""}</div>`;
   $("nameInput").value=d.query&&d.query!==current.code?d.query:"";
   $("grades").innerHTML=gradesHTML(d.product);
   const list=collectPrices(),eurs=list.filter(x=>x.cur==="EUR"),best=eurs[0];
-  $("best").innerHTML=best?`<div class="label"><div><div class="mut" style="color:#333">Goedkoopst gevonden</div><div class="where">${esc(best.shop)}${best.place?", "+esc(best.place):""}</div></div><div class="big">${eur(best.price)}</div><div style="grid-column:1/-1"><button class="addbtn" data-add="0" style="border-color:#111;color:#111;background:transparent">+ Zet op lijstje ${esc(best.shop)}</button></div>${eurs.length>1?`<div style="grid-column:1/-1;font-size:14px">Tot ${eur(eurs[eurs.length-1].price-best.price)} goedkoper dan de duurste van ${eurs.length} aanbieders</div>`:""}</div>`:"";
+  const bsub=[best&&best.unit?`${eur(best.unit.v)} per ${best.unit.label==="l"?"liter":best.unit.label==="kg"?"kilo":"stuk"}`:"",eurs.length>1?`tot ${eur(eurs[eurs.length-1].price-best.price)} goedkoper dan elders`:""].filter(Boolean).join(" · ");
+  $("best").innerHTML=best?`<div class="answer"><div class="arow"><div><div class="alab">Hier het goedkoopst</div><div class="where">${esc(best.shop)}${best.place?`<span class="place">${esc(best.place)}</span>`:""}</div></div><div class="big">${eur(best.price)}</div></div>${bsub?`<div class="asub">${esc(bsub)}</div>`:""}<button class="abtn" data-add="0">${PLUSSVG} Op lijstje ${esc(best.shop)}</button></div>`:"";
   current.rows=list;
+  const known=!!p.name&&list.length>0;$("nameForm").hidden=known;$("fixName").hidden=!known;
   $("prices").innerHTML=list.length?list.map((x,i)=>{
     const dd=best&&x.cur==="EUR"?x.price-best.price:null,u=safeUrl(x.url);
     const name=u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.shop)}</a>`:esc(x.shop);
     const sub=[x.matchedName?`Gevonden als: ${x.matchedName}${x.size?" ("+x.size+")":""}`:x.place,x.unit?`${eur(x.unit.v)} per ${x.unit.label}`:"",x.date&&new Date(x.date).toLocaleDateString("nl-NL",{day:"numeric",month:"short",year:"numeric"})].filter(Boolean).join(" · ");
-    return `<li><div><strong>${name}</strong><span class="src">${esc(x.source)}</span>${x.promo?'<span class="src">aanbieding</span>':""}${x.confidence==="middel"?'<span class="src warn">controleer variant</span>':""}<div class="sub">${esc(sub)}${x.mine?` <button class="del" data-del="${esc(x.id)}">verwijderen</button>`:""}</div><button class="addbtn" data-add="${i}">+ Op lijstje ${esc(x.shop)}</button></div><div><div class="p">${money(x.price,x.cur)}</div>${dd!=null?`<div class="diff ${dd===0?"best":""}">${dd===0?"laagste":"+"+eur(dd)}</div>`:""}</div></li>`}).join("")
+    return `<li><div><strong>${name}</strong>${x.source!=="Checkjebon"?`<span class="src">${esc(x.source)}</span>`:""}${x.promo?'<span class="src">aanbieding</span>':""}${x.confidence==="middel"?'<span class="src warn">controleer variant</span>':""}<div class="sub">${esc(sub)}${x.mine?` <button class="del" data-del="${esc(x.id)}">verwijderen</button>`:""}</div></div><div><div class="p">${money(x.price,x.cur)}</div>${dd!=null?`<div class="diff ${dd===0?"best":""}">${dd===0?"laagste":"+"+eur(dd)}</div>`:""}</div><button class="addi" data-add="${i}" aria-label="Op lijstje ${esc(x.shop)}">${PLUSSVG}</button></li>`}).join("")
     :nOthers(d.others)?`<li><div class="mut">Geen prijs voor precies dit product. Hieronder staan andere groottes en varianten.</div></li>`
     :`<li><div class="mut">Nog geen prijzen gevonden. Probeer hierboven de productnaam te typen, zoek via de links hieronder, of voeg zelf een prijs toe.</div></li>`;
   $("pricesNote").textContent=sourceNote(d.sources||{});
@@ -1726,7 +1822,7 @@ function renderAllergens(){
   if(s.halal)parts.push("halal-keurmerk");
   el.innerHTML=`<div class="alg">${parts.join(" · ")}</div>`+(prefsOn()?"":`<div class="mut">Volgens Open Food Facts, controleer altijd de verpakking.</div><button class="linkbtn" data-open-prefs="1">Mijn allergieën instellen</button>`);
 }
-$("allergens").addEventListener("click",e=>{if(e.target.dataset&&e.target.dataset.openPrefs){$("prefsBox").open=true;$("prefsWrap").scrollIntoView({behavior:"smooth",block:"start"})}});
+$("allergens").addEventListener("click",e=>{if(e.target.dataset&&e.target.dataset.openPrefs){showTab("more");$("prefsBox").open=true;$("prefsWrap").scrollIntoView({behavior:"smooth",block:"start"})}});
 const diffHTML=d=>d==null?"":d===0?" (gelijk)":` (<span class="${d<0?"okx":"warnx"}">${d<0?"▼":"▲"} ${eur(Math.abs(d))}</span>)`;
 const fmtDay=t=>new Date(t).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
 // Prijsverloop: sparklijn (rustige lijn, laatste punt in nadrukkleur) en de prijs van een maand geleden of sinds toevoegen.
@@ -2085,19 +2181,20 @@ function renderBasket(){
   let h=first?`<p style="margin:6px 0">Goedkoopst bij <strong>${esc(first.shop)}</strong>: ${eur(first.total)}</p>`:`<p style="margin:6px 0">Geen enkele winkel heeft alle ${n} producten. De meeste (${r.rows[0].have} van ${n}) heeft <strong>${esc(r.rows[0].shop)}</strong>.</p>`;
   const kk=y=>y.ean||y.name.toLowerCase();
   const canMove=shop=>($("basketAll").checked||shop!==listShop)&&!bi.every(b=>!b.pm||b.pm[shop]==null||(lists[shop]||[]).some(y=>!y.done&&kk(y)===b.key));
-  h+=r.rows.slice(0,6).map(x=>`<div class="br br3${first&&x===first?" best":""}"><div><strong>${esc(x.shop)}</strong><div class="sub">${x.complete?(n===1?"1 product":`alle ${n} producten`):`${x.have} van ${n} producten${x.missing.length?`, mist: ${esc(x.missing.slice(0,3).join(", "))}${x.missing.length>3?"…":""}`:""}`}</div></div>${canMove(x.shop)?`<button class="addall" data-act="moveall" data-shop="${esc(x.shop)}" aria-label="Alles op het lijstje van ${esc(x.shop)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="pointer-events:none"><path d="M12 5v14M5 12h14"/></svg></button>`:`<span class="addall-gap"></span>`}<div class="p">${eur(x.total)}${first&&x.complete&&x!==first?`<div class="diff">+ ${eur(x.total-first.total)}</div>`:""}</div></div>`).join("");
-  const pair=typeof Deals!=="undefined"?Deals.bestPair(bi):null;
+  const rowH=x=>`<div class="br br3${first&&x===first?" best":""}"><div><strong>${esc(x.shop)}</strong><div class="sub">${x.complete?(n===1?"1 product":`alle ${n} producten`):`${x.have} van ${n} producten${x.missing.length?`, mist: ${esc(x.missing.slice(0,3).join(", "))}${x.missing.length>3?"…":""}`:""}`}</div></div>${canMove(x.shop)?`<button class="addall" data-act="moveall" data-shop="${esc(x.shop)}" aria-label="Alles op het lijstje van ${esc(x.shop)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="pointer-events:none"><path d="M12 5v14M5 12h14"/></svg></button>`:`<span class="addall-gap"></span>`}<div class="p">${eur(x.total)}${first&&x.complete&&x!==first?`<div class="diff">+ ${eur(x.total-first.total)}</div>`:""}</div></div>`;
+  h+=r.rows.slice(0,4).map(rowH).join("")+(r.rows.length>4?`<details class="morerows"><summary>Nog ${r.rows.slice(4,10).length} ${r.rows.slice(4,10).length===1?"winkel":"winkels"}</summary>${r.rows.slice(4,10).map(rowH).join("")}</details>`:"");
+  const pair=typeof Deals!=="undefined"?Deals.bestPair(bi):null;let pairH="";
   if(pair){
     const by=s=>pair.picks.filter(x=>x.shop===s).map(x=>(x.qty>1?x.qty+"x ":"")+esc(x.name)).join(", ");
-    h+=`<div class="sav">Verdeeld over 2 winkels: <strong>${esc(pair.shops[0])}</strong> en <strong>${esc(pair.shops[1])}</strong> samen <strong>${eur(pair.total)}</strong>${pair.saving!=null?`, dat scheelt ${eur(pair.saving)} met alleen ${esc(pair.single.shop)}`:pair.complete?`, zo heb je alles`:""}.</div>`
-      +pair.shops.map(s=>`<div class="br"><div><strong>${esc(s)}:</strong> ${by(s)}</div></div>`).join("")
-      +(pair.picks.every(p=>(lists[p.shop]||[]).some(x=>!x.done&&(x.ean||x.name.toLowerCase())===p.key))?`<p class="mut" style="margin:6px 0 0">Je lijstjes staan al zo verdeeld.</p>`:`<div class="row" style="margin-top:8px"><button data-act="split">Zet zo op de lijstjes</button></div>`);
+    pairH=`<div class="answer pairans"><div>Verdeeld over 2 winkels: <strong>${esc(pair.shops[0])}</strong> en <strong>${esc(pair.shops[1])}</strong> samen <strong>${eur(pair.total)}</strong>${pair.saving!=null?`, dat scheelt ${eur(pair.saving)} met alleen ${esc(pair.single.shop)}`:pair.complete?`, zo heb je alles`:""}.</div>`
+      +pair.shops.map(s=>`<div class="pick"><strong>${esc(s)}:</strong> ${by(s)}</div>`).join("")
+      +(pair.picks.every(p=>(lists[p.shop]||[]).some(x=>!x.done&&(x.ean||x.name.toLowerCase())===p.key))?`<p style="margin:0">Je lijstjes staan al zo verdeeld.</p>`:`<button class="abtn" data-act="split">Zet zo op de lijstjes</button>`)+`</div>`;
   }
   h+=undoLine;
   if(r.mix.shops.length>1&&!(pair&&(r.mix.shops.length<=2||r.mix.total>=pair.total-0.005)))h+=`<div class="sav">Elk product bij de goedkoopste winkel: <strong>${eur(r.mix.total)}</strong> (${r.mix.shops.length} winkels)${r.saving>=0.01?`, dat scheelt ${eur(r.saving)} met de beste enkele winkel`:""}.</div><details><summary>Wat koop je waar</summary>${r.mix.picks.map(x=>`<div class="br"><div>${x.qty>1?x.qty+"x ":""}${esc(x.name)}</div><div class="p">${esc(x.shop)} · ${eur(x.price)}</div></div>`).join("")}</details>`;
   const upds=bi.filter(x=>x.pm&&Object.keys(x.pm).length&&x.upd).map(x=>x.upd);
   h+=`<p class="mut" style="margin:8px 0 0">${r.skipped?`${r.skipped} ${r.skipped===1?"product":"producten"} zonder prijs ${r.skipped===1?"is":"zijn"} niet meegeteld. `:""}${upds.length?`Gebaseerd op prijzen van ${Match.ageText(Math.min(...upds),Date.now())}.`:"Gebaseerd op de prijzen op het moment dat je een product op het lijstje zette."}</p>`;
-  $("basket").innerHTML=h;
+  $("basket").innerHTML=pairH+h;
 }
 /* ---------- Lijstjes verdelen over twee winkels (met terugzetten) ---------- */
 let splitUndo=null;
@@ -2139,13 +2236,15 @@ function renderLists(){
   if(!$("listShop").innerHTML.includes(`value="${esc(listShop)}"`))$("listShop").innerHTML+=groupOpts("Overig",[listShop],cnt);
   $("listShop").value=listShop;
   $("shopDel").hidden=!customShops.includes(listShop);
+  const chipShops=[...new Set([...Object.keys(lists).filter(n=>(lists[n]||[]).length),listShop])];
+  $("shopChips").innerHTML=chipShops.map(n=>`<button type="button" data-shop="${esc(n)}" aria-pressed="${n===listShop}">${esc(n)}${cnt(n)?`<span class="n">${cnt(n)}</span>`:""}</button>`).join("")+`<button type="button" class="addshop" data-act="shops" aria-expanded="${!$("shopPanel").hidden}">+ winkel</button>`;
   const arr=lists[listShop]||[];
   $("listItems").innerHTML=arr.length?arr.map(x=>`<div class="li${x.done?" done":""}"><button class="chk" data-act="done" data-id="${esc(x.id)}" aria-label="${x.done?"Terug op lijstje":"Afvinken"}: ${esc(x.name)}">${x.done?"✓":"○"}</button><div><div class="nm"><strong>${esc(x.name)}</strong></div><div class="sub">${x.price!=null?`${eur(x.price)} per stuk`:"prijs onbekend"}${typeof Match!=="undefined"&&Match.recentChange(x,Date.now())?` · ${x.price<x.chg.from?"▼":"▲"} was ${eur(x.chg.from)}`:""}${x.gone?" · prijs niet meer gevonden bij deze winkel":""}${listWarn(x)}${x.alt?` · <span style="color:var(--red)">${eur(x.price-x.alt.price)} goedkoper bij ${esc(x.alt.shop)}</span>`:""} <button class="del" data-act="rm" data-id="${esc(x.id)}">weghalen</button>${HAS_MATCH&&Match.refreshable(x)?` <button class="del" data-act="alarm" data-id="${esc(x.id)}" aria-label="Prijsalarm voor ${esc(x.name)}">🔔</button> <button class="del" data-act="hist" data-id="${esc(x.id)}" aria-expanded="${histOpen.has(x.id)}">Prijsverloop</button>`:""}</div>${histLine(x)}${HAS_MATCH&&histOpen.has(x.id)?histPanel(x):""}${alarmEdit===x.id?`<div class="row" style="margin:6px 0 0"><input id="alarmVal" inputmode="decimal" placeholder="Richtprijs, bv. 2,49" aria-label="Richtprijs in euro" value="${x.tgt?esc(String(x.tgt).replace(".",",")):""}" style="flex:1;min-width:120px"><button data-act="alarmSave" data-id="${esc(x.id)}">Opslaan</button>${x.tgt?`<button data-act="alarmOff" data-id="${esc(x.id)}">Alarm uit</button>`:""}</div>`:""}</div><div><div class="qty"><button data-act="dec" data-id="${esc(x.id)}" aria-label="Minder">−</button><span aria-live="polite">${x.qty}</span><button data-act="inc" data-id="${esc(x.id)}" aria-label="Meer">+</button></div>${x.price!=null?`<div class="lt">${eur(x.price*x.qty)}</div>`:""}</div></div>`).join("")
     :`<p class="mut" style="margin:6px 0">Nog niets op het lijstje van ${esc(listShop)}. Voeg hierboven iets toe, of kies bij een scan "Op lijstje".</p>`;
   const todo=arr.filter(x=>!x.done),unknown=todo.filter(x=>x.price==null).length;
   $("listTotal").innerHTML=arr.length?`<span>Nog te kopen</span><span>${eur(lineSum(arr))}</span>`:"";
   $("listNote").textContent=unknown?`${unknown} ${unknown===1?"product heeft":"producten hebben"} geen prijs en ${unknown===1?"telt":"tellen"} niet mee.`:"";
-  const n=countAll();$("listCount").textContent=n?`(${n})`:"";
+  const n=countAll();$("listCount").textContent=n?String(n):"";
   renderBasket();renderRefresh();
 }
 /* ---------- Prijzen verversen ---------- */
@@ -2209,12 +2308,14 @@ $("autoRefresh").checked=store.get("autoRefresh",true);
 $("autoRefresh").addEventListener("change",()=>store.set("autoRefresh",$("autoRefresh").checked));
 $("refreshBtn").addEventListener("click",()=>{lastTry=Date.now();refreshPrices(true)});
 function showTab(t){
-  const l=t==="list";$("scanView").hidden=l;$("listView").hidden=!l;
-  $("tabScan").setAttribute("aria-pressed",String(!l));$("tabList").setAttribute("aria-pressed",String(l));
-  if(l){renderLists();autoRefresh()}
+  for(const [k,v,b] of [["scan","scanView","tabScan"],["list","listView","tabList"],["more","moreView","tabMore"]]){$(v).hidden=k!==t;$(b).setAttribute("aria-pressed",String(k===t))}
+  if(t==="list"){renderLists();autoRefresh()}
+  toTop();
 }
+function toTop(){try{window.scrollTo({top:0,behavior:"smooth"})}catch(e){}}
 $("tabScan").addEventListener("click",()=>showTab("scan"));
 $("tabList").addEventListener("click",()=>showTab("list"));
+$("tabMore").addEventListener("click",()=>showTab("more"));
 /* ---------- Gedeeld lijstje ontvangen (via een link met #lijst=...) ---------- */
 let incoming=null;
 function clearHash(){try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}}
@@ -2252,7 +2353,8 @@ $("shopDel").addEventListener("click",()=>{
   customShops=customShops.filter(x=>x!==listShop);store.set("customShops",customShops);delete lists[listShop];saveLists();
   listShop="";store.set("listShop","");fillShopSelect();renderLists();
 });
-$("listShop").addEventListener("change",e=>{listShop=e.target.value;store.set("listShop",listShop);renderLists()});
+$("listShop").addEventListener("change",e=>{listShop=e.target.value;store.set("listShop",listShop);$("shopPanel").hidden=true;renderLists()});
+$("shopChips").addEventListener("click",e=>{const d=e.target.dataset||{};if(d.shop){listShop=d.shop;store.set("listShop",listShop);$("shopPanel").hidden=true;renderLists()}else if(d.act==="shops"){$("shopPanel").hidden=!$("shopPanel").hidden;renderLists()}});
 $("listAdd").addEventListener("submit",e=>{
   e.preventDefault();const name=$("liName").value.trim();if(!name)return;
   const raw=$("liPrice").value.replace(/[€\s]/g,"").replace(",","."),v=raw?parseFloat(raw):null;
@@ -2335,6 +2437,10 @@ $("orderBtn").addEventListener("click",showOrder);
 
 $("shop").addEventListener("change",()=>{const n=$("shop").value==="__new";$("newShop").hidden=!n;if(n)$("newShop").focus()});
 $("startBtn").addEventListener("click",startCam);
+function newScan(focus){$("result").hidden=true;$("scanBox").hidden=false;$("backBar").hidden=true;$("eanInput").value="";$("searchOut").innerHTML="";toTop();if(focus)$("eanInput").focus()}
+$("newScan").addEventListener("click",()=>newScan(false));
+$("searchAgain").addEventListener("click",()=>newScan(true));
+$("fixName").addEventListener("click",()=>{$("nameForm").hidden=false;$("fixName").hidden=true;$("nameInput").focus()});
 $("stopBtn").addEventListener("click",stopCam);
 $("photo").addEventListener("change",e=>{const f=e.target.files[0];if(f)scanPhoto(f);e.target.value=""});
 $("eanForm").addEventListener("submit",e=>{
