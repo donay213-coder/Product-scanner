@@ -76,6 +76,7 @@ form.ean{display:flex;gap:8px;margin-top:10px}form.ean input{flex:1}
 .warnx{color:var(--red);font-weight:700}.osec{padding:10px 0 4px;border-top:1px solid var(--line);margin-top:10px}.osec h3{font-size:17px;margin:2px 0 6px}
 .olist{margin:4px 0;padding-left:20px}.olist li{margin:8px 0}.olist a{color:inherit}
 a.btn{text-decoration:none}a.btn.pri{background:var(--ink);color:var(--bg)}
+.tip{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--soft,#f3f1ea);line-height:1.45}.tip .lnk{margin-left:4px}
 .oth{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}.oth summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;list-style:none}.oth summary::-webkit-details-marker{display:none}.oth summary::after{content:"▾";font-size:18px;color:var(--mut,#777);transition:transform .15s}.oth[open] summary::after{transform:rotate(180deg)}.og{padding:8px 0;border-bottom:1px solid var(--line)}.og:last-child{border:0}.ogh{display:flex;justify-content:space-between;align-items:center;gap:8px}.ogo{font-size:14px;margin-top:2px}.lnk{background:none;border:1px solid var(--line);border-radius:8px;padding:4px 10px;font:inherit;font-size:14px;cursor:pointer}
 .oldr{padding:8px 0;border-bottom:1px solid var(--line)}.oldr:last-child{border:0}.oldr .pp{font-weight:700;margin-top:2px}
 .hpanel{margin:6px 0 2px;padding:6px 10px;border-left:3px solid var(--line)}
@@ -119,6 +120,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <body>
 <main>
 <div id="updBar" class="upd" role="status" hidden></div>
+<div id="importBar" class="upd" role="status" hidden></div>
 <header><h1>Prijs<span>scanner</span></h1><span class="mut">Scan, vergelijk, bespaar</span></header>
 <nav class="tabs" aria-label="Weergave">
   <button id="tabScan" aria-pressed="true">Scannen</button>
@@ -168,7 +170,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
   </form>
 
   <h2>Prijzen per winkel</h2>
-  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p><div id="others"></div>
+  <div class="card"><ul class="list" id="prices"></ul><p class="mut" id="pricesNote"></p><div id="house"></div><div id="others"></div>
     <div id="oldWrap" hidden><div class="row" style="align-items:center"><button id="oldBtn" type="button">Prijzen van een maand geleden</button><span class="mut">eenmalig ongeveer 2 MB</span></div><div id="oldOut" aria-live="polite"></div></div>
   </div>
 
@@ -222,7 +224,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
   <details class="card" id="aboutBox" style="margin-top:12px">
     <summary>Over deze app en privacy</summary>
     <h3>Wat de app doet</h3>
-    <p>Prijsscanner zoekt bij een barcode of productnaam de prijzen op die openlijk beschikbaar zijn en laat zien waar het product het goedkoopst is. Supermarktprijzen zijn online prijzen en kunnen in de winkel anders zijn; weekacties staan er niet altijd in. Prijzen zijn een indicatie.</p>
+    <p>Prijsscanner zoekt bij een barcode of productnaam de prijzen op die openlijk beschikbaar zijn en laat zien waar het product het goedkoopst is. Supermarktprijzen zijn online prijzen en kunnen in de winkel anders zijn; weekacties (zoals de Bonus) staan er niet in. Prijzen zijn een indicatie.</p>
     <h3>Privacy</h3>
     <ul>
       <li>Er is geen account, geen advertenties, geen tracking en geen statistieken.</li>
@@ -235,6 +237,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
           <li>bij "Gezondere keuzes": de productcategorie naar Open Food Facts;</li>
           <li>bij "Prijzen van een maand geleden": een vraag aan GitHub (api.github.com) welke versie van de supermarktprijzen bij die datum hoort, en die versie via jsDelivr of GitHub;</li>
           <li>de supermarktprijzen: één bestand van Checkjebon, gedownload via jsDelivr of GitHub;</li>
+          <li>bij "Deel lijstje": alleen wat jij deelt, met wie jij kiest. Het lijstje zit in de link zelf (na het #-teken) en gaat niet via een server van deze app. Wie de link heeft, kan het lijstje lezen;</li>
           <li>de barcodelezer ZXing van unpkg.com, alleen als je browser zelf geen barcodes kan lezen;</li>
           <li>productfoto's van Open Food Facts.</li>
         </ul>
@@ -311,7 +314,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-54d0904";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-679c1f6";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -621,6 +624,8 @@ const brandFirst = (q, it) => {
   const first = [...it.tokens].find((t) => q.brand.has(t) || !STORE_WORDS.has(t));
   return first == null || q.brand.has(first);
 };
+// Alle merkwoorden moeten in de naam staan: "Cola" is geen Coca-Cola, ook al lijkt de rest.
+const brandAll = (q, it) => [...q.brand].every((t) => it.tokens.has(t) || STORE_WORDS.has(t));
 const variantsOf = (set) => [...new Set([...set].map(vt).filter((t) => VARIANT.has(t)))];
 // De woorden zoals ze in de productnaam staan (voor labels): "Stukjes", niet het ingekorte "stukje".
 function nameWords(it, set) {
@@ -655,7 +660,7 @@ function findCandidates(chains, q, { min = 0.6, perChain = 12, high = 0.85 } = {
     for (const [full, it, b] of list.slice(0, perChain)) {
       const iv = variantsOf(it.tokens), extra = iv.filter((t) => !qv.includes(t)), missing = qv.filter((t) => !iv.includes(t));
       const row = toRow(c.key, it, full, high);
-      const cls = extra.length || missing.length ? 'variant' : !q.size || sizeCompare(q.size, it.size) !== 'same' ? 'size' : row.confidence === 'hoog' && brandFirst(q, it) ? 'same' : 'variant';
+      const cls = extra.length || missing.length ? 'variant' : !q.size || sizeCompare(q.size, it.size) !== 'same' ? 'size' : row.confidence === 'hoog' && brandFirst(q, it) && brandAll(q, it) ? 'same' : 'variant';
       let words = extra.length ? nameWords(it, new Set(extra)) : [];
       if (cls === 'variant' && !words.length) { // geen bekend variantwoord: het woord dat dit product onderscheidt ("Puur")
         const own = new Set([...noVariant(it.tokens)].filter((t) => !q.tokens.has(t) && !STORE_WORDS.has(t) && !q.brand.has(t) && !/^\d/.test(t)));
@@ -712,7 +717,7 @@ function groupOthers(cands, q) {
   return { size: sortG(fin(g.size)), variant: sortG(fin(g.variant)) };
 }
 
-const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm, priceTrend, sparkPath, findMatchesRaw, findCandidates, findSame, pickSame, findSameRaw, groupOthers, sizeLabel };
+const API = { norm, tokens, parseSize, stripSize, buildQuery, prepareItem, score, findMatches, unitPrice, sizeCompare, compareBasket, minByShop, freshOk, applyFresh, refreshable, isStale, recentChange, ageText, recordPrice, priceStats, alarmHit, newAlarm, priceTrend, sparkPath, findMatchesRaw, findCandidates, findSame, pickSame, findSameRaw, groupOthers, sizeLabel, STORE_WORDS, NOISE, isVariant: (t) => VARIANT.has(vt(t)) };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Match = API;
 
 })();</script>
@@ -775,7 +780,16 @@ function links(text) {
   };
 }
 
-const API = { CHAINS, chainInfo, links };
+// Huismerken: de woorden waarmee eigen producten in de supermarktdata beginnen (na normaliseren: "G'woon" → "g woon").
+// G'woon en 1 de Beste zijn merken van inkooporganisatie Superunie en liggen bij meerdere ketens.
+const HOUSE = {
+  ah: ['ah'], jumbo: ['jumbo', 'jumbos'], plus: ['plus', 'biologisch plus'], spar: ['spar', 'g woon'],
+  dirk: ['1 de beste', 'dirk'], dekamarkt: ['1 de beste', 'g woon', 'dekavers', 'dekamarkt'],
+  hoogvliet: ['g woon', 'hoogvliet', '1 de beste'], vomar: ['g woon', '1 de beste', 'vomar'], poiesz: ['g woon', '1 de beste', 'poiesz'],
+};
+// Ketens waar eigen producten geen merknaam in de naam hebben ("Hagelslag melk" bij Lidl).
+const HOUSE_GENERIC = ['lidl', 'aldi'];
+const API = { CHAINS, chainInfo, links, HOUSE, HOUSE_GENERIC };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Shops = API;
 
 })();</script>
@@ -1214,6 +1228,173 @@ const API = { ahProductId, ahCartUrl, jumboProductUrl, chainKeyByName, orderPlan
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Order = API;
 
 })();</script>
+<script>(function(){
+'use strict';
+// Besparen: beste koop per liter, goedkoper huismerk, slimste verdeling over twee winkels, lijstje delen via een link.
+const M = typeof module !== 'undefined' && module.exports ? require('./match') : globalThis.Match;
+const r2 = (x) => Math.round(x * 100) / 100;
+const cheapestUnit = (rows) => (rows || []).filter((r) => r && r.unit && r.unit.v > 0).sort((a, b) => a.unit.v - b.unit.v)[0] || null;
+
+// Andere grootte of verpakking die per liter/kilo flink goedkoper is dan het goedkoopste zelfde product.
+// Meer dan 85% goedkoper is vrijwel altijd een fout in de data (verkeerde grootte), dus dat laten we weg.
+function bestDeal(same, others, { min = 0.1, max = 0.85 } = {}) {
+  const ref = cheapestUnit(same);
+  if (!ref || !others || !others.size) return null;
+  let best = null;
+  for (const g of others.size) {
+    for (const o of g.offers || []) {
+      if (!o.unit || o.unit.label !== ref.unit.label || !(o.unit.v > 0)) continue;
+      const pct = 1 - o.unit.v / ref.unit.v;
+      if (pct < min || pct > max) continue;
+      if (!best || o.unit.v < best.unit.v) best = { label: g.label, q: g.q, chain: o.chain, price: o.price, unit: o.unit, pct: Math.round(pct * 100) };
+    }
+  }
+  return best;
+}
+
+// ---- Huismerken ----
+// prefixes: per keten de woorden waarmee eigen producten beginnen ("ah", "1 de beste", "g woon").
+// generic: ketens waar eigen producten geen merknaam hebben (Lidl: "Hagelslag melk"). Daar telt een product als
+// eigen merk als al zijn woorden ook in huismerkproducten van andere ketens voorkomen ("Calvé" of "Amstel" nooit).
+const idxCache = new WeakMap();
+function houseIndex(chains, prefixes, generic) {
+  const hit = idxCache.get(chains);
+  if (hit && hit.prefixes === prefixes) return hit;
+  const words = new Set(), out = [];
+  for (const c of chains) {
+    const P = (prefixes[c.key] || []).map((p) => [p, new Set(M.tokens(p))]).sort((a, b) => b[0].length - a[0].length);
+    const items = [];
+    if (P.length) for (const it of c.items) {
+      const n = M.norm(it.n), h = P.find(([p]) => n === p || n.startsWith(p + ' '));
+      if (!h) continue;
+      const tk = new Set([...it.tokens].filter((t) => !h[1].has(t) || M.isVariant(t))); // "Biologisch PLUS": biologisch blijft
+      if (!tk.size) continue;
+      tk.forEach((t) => words.add(t));
+      items.push({ ...it, tokens: tk, nv: undefined }); // merknaam eraf, zodat "AH Cola" gewoon "cola" is
+    }
+    out.push({ key: c.key, items });
+  }
+  for (const c of chains) {
+    if (!(generic || []).includes(c.key)) continue;
+    const o = out.find((x) => x.key === c.key);
+    for (const it of c.items) {
+      const ts = [...it.tokens].filter((t) => !/^\d/.test(t));
+      if (ts.length && ts.every((t) => words.has(t))) o.items.push(it);
+    }
+  }
+  const res = { prefixes, chains: out, words };
+  idxCache.set(chains, res);
+  return res;
+}
+
+function findHouse(chains, q, same, prefixes, generic) {
+  if (!q || !q.brand || !q.brand.size || [...q.brand].some((t) => M.STORE_WORDS.has(t))) return [];
+  const ref = cheapestUnit(same);
+  if (!ref) return [];
+  const idx = houseIndex(chains, prefixes, generic);
+  // Het gescande product is zelf een huismerk ("1 de Beste", "G'woon"): dan is er niets goedkopers van te zeggen.
+  if (Object.values(prefixes).flat().some((p) => { const t = [...M.tokens(p)]; return t.length && t.every((x) => q.brand.has(x)); })) return [];
+  // Het soort product: de naam zonder merk ("Pindakaas"). Staat het soort in de merknaam (Coca-Cola), neem dan
+  // de merkwoorden die ook in huismerken voorkomen ("cola").
+  let core = [...q.tokens].filter((t) => !q.brand.has(t) && !M.NOISE.has(t) && !M.STORE_WORDS.has(t) && !/^\d/.test(t));
+  if (!core.some((t) => !M.isVariant(t))) core = core.concat([...q.brand].filter((t) => idx.words.has(t)));
+  if (!core.some((t) => !M.isVariant(t))) return [];
+  const q2 = { ...q, brand: new Set(), tokens: new Set(core) };
+  const cands = M.findCandidates(idx.chains, q2, { perChain: 12 })
+    .filter((c) => c.cls !== 'variant' && c.base >= 0.85 && c.unit && c.unit.label === ref.unit.label);
+  const want = q.size ? q.size.amount / 1000 : null; // in liter of kilo, net als de prijs per eenheid
+  const amount = (c) => c.price / c.unit.v;
+  const dist = (c) => (want && c.unit.label !== 'stuk' ? Math.abs(Math.log(amount(c) / want)) : 0);
+  const byChain = new Map();
+  for (const c of cands) {
+    const b = byChain.get(c.chain);
+    const better = !b || (c.cls === 'same') !== (b.cls === 'same') ? !b || c.cls === 'same'
+      : dist(c) < dist(b) - 1e-9 || (Math.abs(dist(c) - dist(b)) < 1e-9 && c.unit.v < b.unit.v);
+    if (better) byChain.set(c.chain, c);
+  }
+  return [...byChain.values()]
+    .map((c) => ({ chain: c.chain, name: c.name, price: c.price, size: c.size, unit: c.unit, sizeLabel: c.sizeLabel, same: c.cls === 'same',
+      q: M.parseSize(c.name) ? c.name : [c.name, c.size].filter(Boolean).join(' '), pct: Math.round((1 - c.unit.v / ref.unit.v) * 100) }))
+    .filter((r) => r.pct >= 5)
+    .sort((a, b) => a.unit.v - b.unit.v);
+}
+
+// ---- Verdeling over twee winkels ----
+// items: [{name, qty, pm:{winkel: prijs}}]. Geeft null als één winkel al (bijna) net zo goed is.
+function bestPair(items, { minSaving = 0.5 } = {}) {
+  const priced = (items || []).filter((it) => it && it.pm && Object.keys(it.pm).length);
+  if (priced.length < 2) return null;
+  const shops = [...new Set(priced.flatMap((it) => Object.keys(it.pm)))];
+  const run = (set) => {
+    let total = 0, have = 0;
+    const picks = [];
+    for (const it of priced) {
+      let best = null;
+      for (const s of set) { const p = it.pm[s]; if (p != null && (!best || p < best[1])) best = [s, p]; }
+      if (!best) continue;
+      have++; total += best[1] * (it.qty || 1);
+      picks.push({ name: it.name, qty: it.qty || 1, shop: best[0], price: best[1], ...(it.key ? { key: it.key } : {}) });
+    }
+    return { set, total: r2(total), have, picks };
+  };
+  const better = (a, b) => !b || a.have > b.have || (a.have === b.have && a.total < b.total);
+  let single = null, pair = null;
+  for (const s of shops) { const r = run([s]); if (better(r, single)) single = r; }
+  for (let i = 0; i < shops.length; i++) for (let j = i + 1; j < shops.length; j++) {
+    const r = run([shops[i], shops[j]]);
+    if (new Set(r.picks.map((p) => p.shop)).size < 2) continue; // de tweede winkel moet ook echt iets opleveren
+    if (better(r, pair)) pair = r;
+  }
+  if (!pair || !(pair.have > single.have || single.total - pair.total >= minSaving)) return null;
+  const spend = (s) => pair.picks.filter((p) => p.shop === s).reduce((t, p) => t + p.price * p.qty, 0);
+  return {
+    shops: [...pair.set].sort((a, b) => spend(b) - spend(a)), total: pair.total, have: pair.have, picks: pair.picks,
+    single: { shop: single.set[0], total: single.total, have: single.have },
+    saving: pair.have === single.have ? r2(single.total - pair.total) : null, complete: pair.have === priced.length,
+  };
+}
+
+// ---- Lijstje delen via een link ----
+// Alles zit in de link zelf (na het #-teken, dat gaat niet naar een server). Bij openen wordt alles opgeschoond:
+// een link kan van iedereen komen.
+function encodeList(shop, items) {
+  const i = (items || []).map((x) => {
+    const a = [String(x.name || ''), x.qty || 1, x.ean || '', x.price != null ? x.price : null];
+    if (x.mq) { const mq = {}; for (const k of ['name', 'brand', 'qty', 'q']) if (x.mq[k]) mq[k] = String(x.mq[k]); a.push(mq); }
+    return a;
+  });
+  return encodeURIComponent(JSON.stringify({ v: 1, s: String(shop || ''), i }));
+}
+function decodeList(s) {
+  let o;
+  try { o = JSON.parse(decodeURIComponent(String(s || ''))); } catch (e) { return null; }
+  if (!o || typeof o !== 'object' || !Array.isArray(o.i)) return null;
+  const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+  const shop = str(o.s, 40);
+  if (!shop) return null;
+  const items = [];
+  for (const a of o.i) {
+    if (!Array.isArray(a)) continue;
+    const name = str(a[0], 120);
+    if (!name) continue;
+    const pr = Number(a[3]);
+    const it = { name, qty: Math.min(99, Math.max(1, Math.round(Number(a[1]) || 1))), ean: String(a[2] == null ? '' : a[2]).replace(/\D/g, '').slice(0, 14),
+      price: a[3] != null && isFinite(pr) && pr > 0 && pr < 1000 ? r2(pr) : null };
+    if (a[4] && typeof a[4] === 'object') {
+      const mq = {};
+      for (const k of ['name', 'brand', 'qty', 'q']) { const v = str(a[4][k], 200); if (v) mq[k] = v; }
+      if (Object.keys(mq).length) it.mq = mq;
+    }
+    items.push(it);
+    if (items.length >= 200) break;
+  }
+  return items.length ? { shop, items } : null;
+}
+
+const API = { bestDeal, houseIndex, findHouse, bestPair, encodeList, decodeList };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Deals = API;
+
+})();</script>
 <script>
 {
 const SHOPS=[
@@ -1390,7 +1571,7 @@ async function lookup(code,q){
   if(code&&!q&&names[code])q=names[code];
   showErr("");$("eanInput").value=code;$("result").hidden=false;
   $("prod").innerHTML=`<div class="ph"></div><div><h3>Bezig met zoeken…</h3><div class="mut">${esc(q||"EAN "+code)}</div></div>`;
-  $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";$("others").innerHTML="";
+  $("best").innerHTML="";$("grades").innerHTML="";$("prices").innerHTML="";$("pricesNote").textContent="";$("others").innerHTML="";$("house").innerHTML="";
   $("result").scrollIntoView({behavior:"smooth",block:"start"});
   let d;
   try{d=await fetchData(code,q)}catch(e){showErr("Opzoeken mislukt: de server is niet bereikbaar.");return}
@@ -1408,15 +1589,28 @@ function collectPrices(){
 const chipHTML=a=>(a||[]).map(l=>`<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.name)} ↗</a>`).join("");
 /* ---------- Andere groottes, verpakkingen en smaken (apart, ingeklapt) ---------- */
 const nOthers=o=>o?o.size.length+o.variant.length:0;
-function othersHTML(o,noSame){
+const perUnit=l=>l==="l"?"liter":l==="kg"?"kilo":"stuk";
+function othersHTML(o,noSame,tip){
   if(!nOthers(o))return "";
   const grp=g=>`<div class="og"><div class="ogh"><b>${esc(g.label)}</b><button class="lnk" data-oq="${esc(g.q)}">Bekijk</button></div><div class="sub">${esc(g.name)}</div><div class="ogo">${g.offers.map(x=>`<span>${esc(Shops.chainInfo(x.chain).name)} ${eur(x.price)}${x.unit?` (${eur(x.unit.v)}/${esc(x.unit.label)})`:""}</span>`).join(" · ")}</div></div>`;
   const sec=(t,gs,open)=>gs.length?`<details class="oth"${open?" open":""}><summary>${t} (${gs.length})</summary>${gs.map(grp).join("")}</details>`:"";
   const openSize=noSame&&o.size.length>0;
-  return (openSize?`<p class="mut">Geen exact zelfde product gevonden. Kies hieronder een grootte.</p>`:"")
+  return (tip?`<p class="tip"><b>Tip:</b> ${esc(tip.label)} bij ${esc(Shops.chainInfo(tip.chain).name)} is per ${perUnit(tip.unit.label)} ${tip.pct}% goedkoper: ${eur(tip.price)} (${eur(tip.unit.v)}/${esc(tip.unit.label)}). <button class="lnk" data-oq="${esc(tip.q)}">Bekijk</button></p>`:"")
+    +(openSize?`<p class="mut">Geen exact zelfde product gevonden. Kies hieronder een grootte.</p>`:"")
     +sec("Andere groottes en verpakkingen",o.size,openSize)+sec("Andere smaken en varianten",o.variant,noSame&&!o.size.length);
 }
 $("others").addEventListener("click",e=>{const q=e.target.dataset?.oq;if(q)lookup("",q)});
+/* ---------- Goedkoper huismerk (pas na de prijzen: de eerste keer kost het even rekenwerk) ---------- */
+async function renderHouse(d,same){
+  try{
+    const chains=await loadCjb();
+    if(!current||current.data!==d)return; // intussen een ander product
+    const h=Deals.findHouse(chains,Match.buildQuery(d.qa||{}),same,Shops.HOUSE,Shops.HOUSE_GENERIC);
+    if(!h.length||current.data!==d)return;
+    $("house").innerHTML=`<details class="oth"><summary>Goedkoper huismerk (${h.length}) · tot ${Math.max(...h.map(x=>x.pct))}% goedkoper</summary>${h.map(x=>`<div class="og"><div class="ogh"><b>${esc(x.name)}</b><button class="lnk" data-oq="${esc(x.q)}">Bekijk</button></div><div class="sub">${esc(Shops.chainInfo(x.chain).name)} · ${esc(x.sizeLabel)}${x.same?"":" (andere grootte)"}</div><div class="ogo">${eur(x.price)} (${eur(x.unit.v)}/${esc(x.unit.label)}) · ${x.pct}% goedkoper per ${perUnit(x.unit.label)}</div></div>`).join("")}</details>`;
+  }catch(e){}
+}
+$("house").addEventListener("click",e=>{const q=e.target.dataset?.oq;if(q)lookup("",q)});
 function sourceNote(s){
     const t=[],c=s.checkjebon;
   if(c)t.push(c.producten?`Supermarktprijzen uit Checkjebon (${c.gevonden} winkels gekoppeld, bijgewerkt ${c.bijgewerkt}${c.status==="verouderd"?", verouderd":""})`:`Supermarktprijzen niet beschikbaar (${c.status}${c.fout?": "+c.fout:""})`);
@@ -1450,7 +1644,9 @@ function render(){
     :nOthers(d.others)?`<li><div class="mut">Geen prijs voor precies dit product. Hieronder staan andere groottes en varianten.</div></li>`
     :`<li><div class="mut">Nog geen prijzen gevonden. Probeer hierboven de productnaam te typen, zoek via de links hieronder, of voeg zelf een prijs toe.</div></li>`;
   $("pricesNote").textContent=sourceNote(d.sources||{});
-  $("others").innerHTML=othersHTML(d.others,!(d.sources?.checkjebon?.gevonden));
+  const sameRows=(d.prices||[]).filter(x=>x.source==="Checkjebon");
+  $("others").innerHTML=othersHTML(d.others,!(d.sources?.checkjebon?.gevonden),typeof Deals!=="undefined"?Deals.bestDeal(sameRows,d.others):null);
+  $("house").innerHTML="";if(d.others&&sameRows.length&&typeof Deals!=="undefined")setTimeout(()=>renderHouse(d,sameRows),30);
   const L=d.links,q=encodeURIComponent(d.query||current.code);
   $("promos").innerHTML=L?chipHTML(L.promos):"";
   $("chips").innerHTML=L?chipHTML(L.shops):SHOPS.map(s=>`<a href="${s[1]}${q}" target="_blank" rel="noopener">${esc(s[0])} ↗</a>`).join("");
@@ -1872,7 +2068,7 @@ function basketItems(all){
   const src=all?Object.values(lists).flat():(lists[listShop]||[]),map=new Map();
   for(const x of src){
     if(x.done)continue;const k=x.ean||x.name.toLowerCase(),ex=map.get(k);
-    if(!ex)map.set(k,{name:x.name,qty:x.qty,pm:x.pm?{...x.pm}:null,upd:x.upd||0});
+    if(!ex)map.set(k,{key:k,name:x.name,qty:x.qty,pm:x.pm?{...x.pm}:null,upd:x.upd||0});
     else{ex.qty=Math.max(ex.qty,x.qty);if(x.upd&&(!ex.upd||x.upd<ex.upd))ex.upd=x.upd;if(x.pm){ex.pm=ex.pm||{};for(const [sh,pr] of Object.entries(x.pm))if(ex.pm[sh]==null||pr<ex.pm[sh])ex.pm[sh]=pr}}
   }
   return [...map.values()];
@@ -1880,16 +2076,48 @@ function basketItems(all){
 function renderBasket(){
   if(typeof Match==="undefined"){$("basketCard").hidden=true;return}
   const bi=basketItems($("basketAll").checked),r=Match.compareBasket(bi);
-  if(!r.priced){$("basketCard").hidden=true;return}
+  const undoLine=splitUndo?`<p class="mut" style="margin:8px 0 0">Je lijstjes zijn verdeeld. <button class="lnk" data-act="unsplit">Terugzetten</button></p>`:"";
+  if(!r.priced){$("basketCard").hidden=!splitUndo;$("basket").innerHTML=undoLine;return}
   $("basketCard").hidden=false;
   const first=r.rows.find(x=>x.complete),n=r.priced;
   let h=first?`<p style="margin:6px 0">Goedkoopst bij <strong>${esc(first.shop)}</strong>: ${eur(first.total)}</p>`:`<p style="margin:6px 0">Geen enkele winkel heeft alle ${n} producten. De meeste (${r.rows[0].have} van ${n}) heeft <strong>${esc(r.rows[0].shop)}</strong>.</p>`;
   h+=r.rows.slice(0,6).map(x=>`<div class="br${first&&x===first?" best":""}"><div><strong>${esc(x.shop)}</strong><div class="sub">${x.complete?(n===1?"1 product":`alle ${n} producten`):`${x.have} van ${n} producten${x.missing.length?`, mist: ${esc(x.missing.slice(0,3).join(", "))}${x.missing.length>3?"…":""}`:""}`}</div></div><div class="p">${eur(x.total)}${first&&x.complete&&x!==first?`<div class="diff">+ ${eur(x.total-first.total)}</div>`:""}</div></div>`).join("");
-  if(r.mix.shops.length>1)h+=`<div class="sav">Elk product bij de goedkoopste winkel: <strong>${eur(r.mix.total)}</strong> (${r.mix.shops.length} winkels)${r.saving>=0.01?`, dat scheelt ${eur(r.saving)} met de beste enkele winkel`:""}.</div><details><summary>Wat koop je waar</summary>${r.mix.picks.map(x=>`<div class="br"><div>${x.qty>1?x.qty+"x ":""}${esc(x.name)}</div><div class="p">${esc(x.shop)} · ${eur(x.price)}</div></div>`).join("")}</details>`;
+  const pair=typeof Deals!=="undefined"?Deals.bestPair(bi):null;
+  if(pair){
+    const by=s=>pair.picks.filter(x=>x.shop===s).map(x=>(x.qty>1?x.qty+"x ":"")+esc(x.name)).join(", ");
+    h+=`<div class="sav">Verdeeld over 2 winkels: <strong>${esc(pair.shops[0])}</strong> en <strong>${esc(pair.shops[1])}</strong> samen <strong>${eur(pair.total)}</strong>${pair.saving!=null?`, dat scheelt ${eur(pair.saving)} met alleen ${esc(pair.single.shop)}`:pair.complete?`, zo heb je alles`:""}.</div>`
+      +pair.shops.map(s=>`<div class="br"><div><strong>${esc(s)}:</strong> ${by(s)}</div></div>`).join("")
+      +(pair.picks.every(p=>(lists[p.shop]||[]).some(x=>!x.done&&(x.ean||x.name.toLowerCase())===p.key))?`<p class="mut" style="margin:6px 0 0">Je lijstjes staan al zo verdeeld.</p>`:`<div class="row" style="margin-top:8px"><button data-act="split">Zet zo op de lijstjes</button></div>`);
+  }
+  h+=undoLine;
+  if(r.mix.shops.length>1&&!(pair&&(r.mix.shops.length<=2||r.mix.total>=pair.total-0.005)))h+=`<div class="sav">Elk product bij de goedkoopste winkel: <strong>${eur(r.mix.total)}</strong> (${r.mix.shops.length} winkels)${r.saving>=0.01?`, dat scheelt ${eur(r.saving)} met de beste enkele winkel`:""}.</div><details><summary>Wat koop je waar</summary>${r.mix.picks.map(x=>`<div class="br"><div>${x.qty>1?x.qty+"x ":""}${esc(x.name)}</div><div class="p">${esc(x.shop)} · ${eur(x.price)}</div></div>`).join("")}</details>`;
   const upds=bi.filter(x=>x.pm&&Object.keys(x.pm).length&&x.upd).map(x=>x.upd);
   h+=`<p class="mut" style="margin:8px 0 0">${r.skipped?`${r.skipped} ${r.skipped===1?"product":"producten"} zonder prijs ${r.skipped===1?"is":"zijn"} niet meegeteld. `:""}${upds.length?`Gebaseerd op prijzen van ${Match.ageText(Math.min(...upds),Date.now())}.`:"Gebaseerd op de prijzen op het moment dat je een product op het lijstje zette."}</p>`;
   $("basket").innerHTML=h;
 }
+/* ---------- Lijstjes verdelen over twee winkels (met terugzetten) ---------- */
+let splitUndo=null;
+function applySplit(){
+  const pair=Deals.bestPair(basketItems($("basketAll").checked));if(!pair)return;
+  const before=JSON.stringify(lists),to=new Map(pair.picks.map(p=>[p.key,p])),src=$("basketAll").checked?Object.keys(lists):[listShop];
+  const k=x=>x.ean||x.name.toLowerCase();let moved=0;
+  for(const s of src)for(const x of [...(lists[s]||[])]){
+    const p=!x.done&&to.get(k(x));if(!p||p.shop===s)continue;
+    lists[s].splice(lists[s].indexOf(x),1);
+    const dst=lists[p.shop]=lists[p.shop]||[],ex=dst.find(y=>!y.done&&k(y)===k(x));
+    if(ex){ex.qty=Math.max(ex.qty,x.qty);ex.price=p.price}else dst.push({...x,price:p.price});
+    moved++;
+  }
+  splitUndo={before,shop:listShop,after:JSON.stringify(lists)};
+  listShop=pair.shops[0];store.set("listShop",listShop);
+  saveLists();renderLists();toast(`${moved} ${moved===1?"product":"producten"} verdeeld over ${pair.shops.join(" en ")}`);
+}
+function undoSplit(){
+  if(!splitUndo)return;
+  if(JSON.stringify(lists)!==splitUndo.after){splitUndo=null;renderLists();toast("Terugzetten kan niet meer: je lijstjes zijn intussen veranderd");return}
+  lists=JSON.parse(splitUndo.before);listShop=splitUndo.shop;store.set("listShop",listShop);splitUndo=null;saveLists();renderLists();toast("Lijstjes teruggezet");
+}
+$("basket").addEventListener("click",e=>{const a=e.target.dataset?.act;if(a==="split")applySplit();else if(a==="unsplit")undoSplit()});
 function renderLists(){
   const cnt=n=>(lists[n]||[]).filter(x=>!x.done).length;
   if(!listShop)listShop=[...BASESHOPS,...TANK,...customShops,...Object.keys(lists)].find(n=>(lists[n]||[]).length)||BASESHOPS[0];
@@ -1973,6 +2201,32 @@ function showTab(t){
 }
 $("tabScan").addEventListener("click",()=>showTab("scan"));
 $("tabList").addEventListener("click",()=>showTab("list"));
+/* ---------- Gedeeld lijstje ontvangen (via een link met #lijst=...) ---------- */
+let incoming=null;
+function clearHash(){try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}}
+function checkIncoming(){
+  const h=location.hash||"";if(!h.startsWith("#lijst=")||typeof Deals==="undefined")return;
+  incoming=Deals.decodeList(h.slice(7));
+  if(!incoming){clearHash();return}
+  const n=incoming.items.length;
+  $("importBar").innerHTML=`<span>Gedeeld lijstje ontvangen: ${esc(incoming.shop)}, ${n} ${n===1?"product":"producten"}.</span><span style="display:flex;gap:6px"><button data-act="import">Toevoegen</button><button data-act="skip">Negeren</button></span>`;
+  $("importBar").hidden=false;
+}
+$("importBar").addEventListener("click",e=>{
+  const a=e.target.dataset?.act;if(!a||!incoming)return;
+  if(a==="import"){
+    const arr=lists[incoming.shop]=lists[incoming.shop]||[],k=x=>x.ean||x.name.toLowerCase();
+    for(const it of incoming.items){
+      const ex=arr.find(y=>!y.done&&k(y)===k(it));
+      if(ex)ex.qty=Math.max(ex.qty,it.qty);
+      else arr.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),ean:it.ean,name:it.name,price:it.price,qty:it.qty,done:false,upd:0,...(it.mq?{mq:it.mq}:{})});
+    }
+    listShop=incoming.shop;store.set("listShop",listShop);saveLists();renderLists();showTab("list");
+    toast(`${incoming.items.length} ${incoming.items.length===1?"product":"producten"} op het lijstje van ${incoming.shop}`);
+  }
+  incoming=null;$("importBar").hidden=true;$("importBar").innerHTML="";clearHash();
+});
+checkIncoming();window.addEventListener?.("hashchange",checkIncoming);
 $("basketAll").checked=!!store.get("basketAll",false);
 $("basketAll").addEventListener("change",()=>{store.set("basketAll",$("basketAll").checked);renderBasket()});
 $("shopAdd").addEventListener("submit",e=>{
@@ -2020,7 +2274,10 @@ $("listClearAll").addEventListener("click",()=>{
 });
 $("listShare").addEventListener("click",async()=>{
   const arr=lists[listShop]||[];if(!arr.length){toast("Het lijstje is leeg");return}
-  const text=`Boodschappen ${listShop}\n`+arr.map(x=>`${x.done?"[x]":"[ ]"} ${x.qty}x ${x.name}${x.price!=null?" ("+eur(x.price)+")":""}`).join("\n")+`\nTotaal: ${eur(lineSum(arr))}`;
+  const todo=arr.filter(x=>!x.done);
+  // link met het lijstje erin (na #, dat gaat niet naar een server): de ontvanger kan het in zijn eigen app zetten
+  const link=typeof Deals!=="undefined"&&todo.length&&/^https?:/.test(location.origin||"")?`${location.origin}${location.pathname}#lijst=${Deals.encodeList(listShop,todo)}`:"";
+  const text=`Boodschappen ${listShop}\n`+arr.map(x=>`${x.done?"[x]":"[ ]"} ${x.qty}x ${x.name}${x.price!=null?" ("+eur(x.price)+")":""}`).join("\n")+`\nTotaal: ${eur(lineSum(arr))}`+(link?`\n\nOpen dit lijstje in de Prijsscanner:\n${link}`:"");
   try{if(navigator.share){await navigator.share({title:`Boodschappen ${listShop}`,text});return}}catch(e){if(e&&e.name==="AbortError")return}
   try{await navigator.clipboard.writeText(text);toast("Lijstje gekopieerd")}catch(e){toast("Kopiëren lukt niet op dit apparaat")}
 });
