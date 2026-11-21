@@ -314,7 +314,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-679c1f6";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-7ebf26f";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -1532,9 +1532,10 @@ function loadCjb(strict){
   return cjbP.catch(e=>{if(cjb&&!strict)return cjb;throw e});
 }
 async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} = productgegevens die we al hebben, dan geen Open Food Facts-opvraging // zonder server: alles in de browser
+  // Elke bron een eigen tijdslimiet: een hangende server mag de scan niet laten vastlopen.
   const [p,pr]=await Promise.allSettled([
-    code&&!known?getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade,categories_tags,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,labels_tags,ingredients_tags`):null,
-    code?getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`):null
+    code&&!known?withTimeout(getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade,categories_tags,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,labels_tags,ingredients_tags`),12000):null,
+    code?withTimeout(getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`),6000):null
   ]);
   const o=p.status==="fulfilled"&&p.value&&p.value.status===1?p.value.product:null;
   const product=known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed"),...(typeof Health!=="undefined"?Health.halalInfo(o):{})}:null;
