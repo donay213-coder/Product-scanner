@@ -1,0 +1,73 @@
+# Webshopcatalogus: elke ochtend de productbestanden van partnerprogramma's ophalen
+# en als catalog.json op de tak 'catalogus' zetten. De app leest die tak.
+# Links staan in de geheimen FEED_1 … FEED_30 (Settings → Secrets and variables → Actions).
+# Inhoud van een geheim: alleen de link, of  Naam|link  (bijvoorbeeld  Praxis|https://…).
+name: Webshopcatalogus
+
+on:
+  schedule:
+    - cron: '17 3 * * *'   # elke dag rond 04:17 Nederlandse tijd
+  workflow_dispatch:        # of met de hand: Actions → Webshopcatalogus → Run workflow
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalogus
+  cancel-in-progress: false
+
+jobs:
+  bouwen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Productbestanden ophalen en catalogus maken
+        run: node tools/feeds/import.js out
+        env:
+          FEED_1: ${{ secrets.FEED_1 }}
+          FEED_2: ${{ secrets.FEED_2 }}
+          FEED_3: ${{ secrets.FEED_3 }}
+          FEED_4: ${{ secrets.FEED_4 }}
+          FEED_5: ${{ secrets.FEED_5 }}
+          FEED_6: ${{ secrets.FEED_6 }}
+          FEED_7: ${{ secrets.FEED_7 }}
+          FEED_8: ${{ secrets.FEED_8 }}
+          FEED_9: ${{ secrets.FEED_9 }}
+          FEED_10: ${{ secrets.FEED_10 }}
+          FEED_11: ${{ secrets.FEED_11 }}
+          FEED_12: ${{ secrets.FEED_12 }}
+          FEED_13: ${{ secrets.FEED_13 }}
+          FEED_14: ${{ secrets.FEED_14 }}
+          FEED_15: ${{ secrets.FEED_15 }}
+          FEED_16: ${{ secrets.FEED_16 }}
+          FEED_17: ${{ secrets.FEED_17 }}
+          FEED_18: ${{ secrets.FEED_18 }}
+          FEED_19: ${{ secrets.FEED_19 }}
+          FEED_20: ${{ secrets.FEED_20 }}
+          FEED_21: ${{ secrets.FEED_21 }}
+          FEED_22: ${{ secrets.FEED_22 }}
+          FEED_23: ${{ secrets.FEED_23 }}
+          FEED_24: ${{ secrets.FEED_24 }}
+          FEED_25: ${{ secrets.FEED_25 }}
+          FEED_26: ${{ secrets.FEED_26 }}
+          FEED_27: ${{ secrets.FEED_27 }}
+          FEED_28: ${{ secrets.FEED_28 }}
+          FEED_29: ${{ secrets.FEED_29 }}
+          FEED_30: ${{ secrets.FEED_30 }}
+      - name: Catalogus op de tak 'catalogus' zetten
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          git init -q -b catalogus
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Catalogus $(date -u +%F)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" catalogus

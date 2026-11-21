@@ -386,6 +386,7 @@ button.ghost{border:0;background:none;color:var(--ink)}
           <li>bij "Gezondere keuzes": de productcategorie naar Open Food Facts;</li>
           <li>bij "Prijzen van een maand geleden": een vraag aan GitHub (api.github.com) welke versie van de supermarktprijzen bij die datum hoort, en die versie via jsDelivr of GitHub;</li>
           <li>de supermarktprijzen: één bestand van Checkjebon, gedownload via jsDelivr of GitHub;</li>
+          <li>de webshopprijzen: één bestand per dag van GitHub, gemaakt uit de productbestanden van partnerprogramma's (zoals Awin, TradeTracker, Daisycon en bol). Links naar webshops kunnen partnerlinks zijn: tik je erop en koop je iets, dan krijgt de app een vergoeding van de winkel. Jij betaalt niets extra, maar de winkel en het netwerk zien dat je via de app kwam;</li>
           <li>bij "Deel lijstje": alleen wat jij deelt, met wie jij kiest. Het lijstje zit in de link zelf (na het #-teken) en gaat niet via een server van deze app. Wie de link heeft, kan het lijstje lezen;</li>
           <li>de barcodelezer ZXing van unpkg.com, alleen als je browser zelf geen barcodes kan lezen;</li>
           <li>productfoto's van Open Food Facts.</li>
@@ -415,7 +416,7 @@ button.ghost{border:0;background:none;color:var(--ink)}
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-0425f88";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-172bc53";window.CATALOG_BASE="https://raw.githubusercontent.com/donay213-coder/product-scanner/catalogus/";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -1512,6 +1513,102 @@ const API = { bestDeal, houseIndex, findHouse, bestPair, encodeList, decodeList 
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Deals = API;
 
 })();</script>
+<script>(function(){
+'use strict';
+// Webshopcatalogus (dagelijks gemaakt uit de productbestanden van partnerprogramma's).
+// cat = {updated, shard, shops:[naam], items:[[naam, prijs in centen, winkel, EAN]]}; links staan apart.
+const M = typeof module !== 'undefined' && module.exports ? require('./match') : globalThis.Match;
+
+const prepCache = new WeakMap();
+function prep(cat) {
+  let P = prepCache.get(cat);
+  if (P) return P;
+  const chains = cat.shops.map((s, si) => ({ key: 'w' + si, items: [] })), ean = new Map(), idx = [];
+  cat.items.forEach(([n, c, si, e], i) => {
+    const it = M.prepareItem({ n, l: String(i), p: c / 100, s: '' });
+    if (it && chains[si]) { chains[si].items.push(it); idx.push({ i, nn: M.norm(n), key: [...it.tokens].sort().join(' ') }); }
+    if (e) { if (!ean.has(e)) ean.set(e, []); ean.get(e).push(i); }
+  });
+  P = { chains, ean, idx };
+  prepCache.set(cat, P);
+  return P;
+}
+const shopOfKey = (cat, key) => cat.shops[+String(key).slice(1)];
+
+// Prijzen voor dit product: eerst op barcode (zeker), daarna hetzelfde product op naam (zelfde strenge koppeling
+// als bij de supermarkten). Zonder grootte in naam én zoekvraag (gereedschap, apparaten) telt een zekere naamkoppeling.
+function offers(cat, code, q) {
+  if (!cat || !cat.items) return [];
+  const P = prep(cat), out = new Map();
+  const add = (row) => { const o = out.get(row.shop); if (!o || (o.via === 'naam' && row.via === 'barcode') || (o.via === row.via && row.price < o.price)) out.set(row.shop, row); };
+  for (const i of (code && P.ean.get(code)) || []) {
+    const [n, c, si] = cat.items[i];
+    add({ shop: cat.shops[si], price: c / 100, name: n, idx: i, via: 'barcode' });
+  }
+  if (q && q.tokens && q.tokens.size) {
+    for (const c of M.findCandidates(P.chains, q, { perChain: 6 })) {
+      const ok = c.cls === 'same' || (c.cls === 'size' && !q.size && c.sizeLabel === 'grootte onbekend' && c.confidence === 'hoog');
+      if (ok) add({ shop: shopOfKey(cat, c.chain), price: c.price, name: c.name, idx: +c.link, via: 'naam' });
+    }
+  }
+  return [...out.values()].sort((a, b) => a.price - b.price);
+}
+
+function nameFor(cat, code) {
+  const l = cat && code && prep(cat).ean.get(code);
+  return l && l.length ? cat.items[l[0]][0] : '';
+}
+
+// Zoeken op naam ("koelkast"): alle woorden moeten erin staan; per product (zelfde EAN of zelfde naam) de winkels.
+function search(cat, query, max = 8) {
+  if (!cat || !cat.items) return [];
+  const terms = M.tokens(M.stripSize(query)).filter((t) => t.length >= 2);
+  if (!terms.length) return [];
+  const P = prep(cat), hits = [];
+  for (const e of P.idx) {
+    let sc = 0;
+    for (const t of terms) {
+      if (e.nn.startsWith(t) || e.nn.includes(' ' + t)) sc += 3;
+      else if (e.nn.includes(t)) sc += 1;
+      else { sc = -1; break; }
+    }
+    if (sc >= 0) hits.push([e, sc]);
+    if (hits.length > 5000) break;
+  }
+  const groups = [], byEan = new Map(), byName = new Map();
+  const join = (g, e, sc) => {
+    const [n, c, si, ean] = cat.items[e.i], shop = cat.shops[si];
+    g.score = Math.max(g.score, sc);
+    const o = g.byShop.get(shop);
+    if (!o || c < o.c) g.byShop.set(shop, { c, i: e.i });
+    if (!g.ean && ean) g.ean = ean;
+    byName.set(e.key, g);
+  };
+  for (const [e, sc] of hits) { // eerst alles met barcode
+    const ean = cat.items[e.i][3];
+    if (!ean) continue;
+    let g = byEan.get(ean);
+    if (!g) { g = { name: cat.items[e.i][0], ean, score: sc, byShop: new Map() }; byEan.set(ean, g); groups.push(g); }
+    join(g, e, sc);
+  }
+  for (const [e, sc] of hits) { // dan zonder barcode: bij een product met dezelfde naam
+    if (cat.items[e.i][3]) continue;
+    let g = byName.get(e.key);
+    if (!g) { g = { name: cat.items[e.i][0], ean: '', score: sc, byShop: new Map() }; groups.push(g); }
+    join(g, e, sc);
+  }
+  return groups.map((g) => {
+    const offers = [...g.byShop].map(([shop, o]) => ({ shop, price: o.c / 100, idx: o.i })).sort((a, b) => a.price - b.price);
+    return { name: g.name, ean: g.ean, score: g.score, offers, shops: offers.length, minPrice: offers[0].price, cheapest: offers[0].shop };
+  }).sort((a, b) => b.score - a.score || b.shops - a.shops || a.name.length - b.name.length || a.minPrice - b.minPrice).slice(0, max);
+}
+
+const linkSpot = (cat, i) => { const s = cat.shard || 2000; return [Math.floor(i / s), i % s]; };
+
+const API = { offers, nameFor, search, linkSpot };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Catalog = API;
+
+})();</script>
 <script>
 {
 const SHOPS=[
@@ -1649,6 +1746,21 @@ function loadCjb(strict){
   if(!cjbP)cjbP=fetchCjb().finally(()=>{cjbP=null});
   return cjbP.catch(e=>{if(cjb&&!strict)return cjb;throw e});
 }
+/* ---------- Webshopcatalogus: één bestand per dag, links pas als ze nodig zijn ---------- */
+const CAT_BASE=window.CATALOG_BASE||"";
+let catP=null,catAt=0;const linkCache=new Map();
+function loadCatalog(){
+  if(!CAT_BASE||typeof Catalog==="undefined")return Promise.resolve(null);
+  if(catP&&Date.now()-catAt<6*3600e3)return catP;
+  catAt=Date.now();
+  catP=withTimeout(getJSON(CAT_BASE+"catalog.json"),30000).then(c=>c&&Array.isArray(c.items)&&c.items.length?c:null).catch(()=>{catP=null;return null});
+  return catP;
+}
+async function catLinks(cat,idxs){
+  const k=n=>cat.updated+":"+n,need=[...new Set(idxs.map(i=>Catalog.linkSpot(cat,i)[0]))].filter(n=>!linkCache.has(k(n)));
+  await Promise.all(need.map(n=>withTimeout(getJSON(CAT_BASE+"links/"+n+".json"),15000).then(a=>{if(Array.isArray(a))linkCache.set(k(n),a)}).catch(()=>{})));
+  return idxs.map(i=>{const [n,p]=Catalog.linkSpot(cat,i),a=linkCache.get(k(n));return a&&typeof a[p]==="string"?a[p]:""});
+}
 const NONFOOD_DBS=[["Open Beauty Facts","world.openbeautyfacts.org"],["Open Products Facts","world.openproductsfacts.org"]];
 async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} = productgegevens die we al hebben, dan geen Open Food Facts-opvraging // zonder server: alles in de browser
   // Elke bron een eigen tijdslimiet: een hangende server mag de scan niet laten vastlopen.
@@ -1661,7 +1773,7 @@ async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} =
     const alt=await Promise.allSettled(NONFOOD_DBS.map(([,h])=>withTimeout(getJSON(`https://${h}/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url`),8000)));
     alt.forEach((v,i)=>{if(!o&&v.status==="fulfilled"&&v.value&&v.value.status===1){o=v.value.product;nonfood=NONFOOD_DBS[i][0]}});
   }
-  const product=nonfood?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:"",nova:"",eco:"",nonfood}:known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed"),...(typeof Health!=="undefined"?Health.halalInfo(o):{})}:null;
+  let product=nonfood?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:"",nova:"",eco:"",nonfood}:known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed"),...(typeof Health!=="undefined"?Health.halalInfo(o):{})}:null;
   const prices=[],seen=new Set(),sources={standalone:true,openprices:!code?"niet gevraagd":pr.status==="fulfilled"?"ok":"niet bereikbaar"};
   if(pr.status==="fulfilled"&&pr.value)for(const it of pr.value.items||[]){
     if(it.price==null)continue;const L=it.location||{};const shop=L.osm_name||"Onbekende winkel",place=[L.osm_address_city,L.osm_address_country].filter(Boolean).join(", ");
@@ -1677,7 +1789,17 @@ async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} =
     for(const x of m){const c=Shops.chainInfo(x.chain);prices.push({source:"Checkjebon",shop:c.name,place:"online prijs",matchedName:x.name,size:x.size,price:x.price,cur:"EUR",unit:x.unit,confidence:x.confidence,url:c.product&&x.link&&c.key==="ah"?c.product(x.link):c.search?c.search(q.text):""})}
     sources.checkjebon={status:"ok",producten:chains.reduce((n,c)=>n+c.items.length,0),gevonden:m.length,bijgewerkt:new Date(store.get("cjbTs",Date.now())).toISOString().slice(0,10)};
   }catch(e){sources.checkjebon={status:"niet bereikbaar",fout:String(e.message||e)}}
-  const text=q.text||code;
+  // Webshops (dagelijkse catalogus uit partnerprogramma's): exact op barcode, en hetzelfde product op naam
+  try{
+    const cat=await loadCatalog();
+    if(cat){
+      const rows=Catalog.offers(cat,code,q.tokens.size?q:null),urls=await catLinks(cat,rows.map(r=>r.idx));
+      rows.forEach((r,i)=>prices.push({source:"Webshop",shop:r.shop,place:"online prijs",matchedName:r.name,price:r.price,cur:"EUR",url:urls[i]}));
+      sources.webshops={status:"ok",producten:cat.items.length,gevonden:rows.length,bijgewerkt:String(cat.updated||"").slice(0,10)};
+      if(!product&&code){const nm=Catalog.nameFor(cat,code);if(nm)product={name:nm,brand:"",qty:"",img:"",nutri:"",nova:"",eco:"",nonfood:"Webshop"}}
+    }
+  }catch(e){sources.webshops={status:"niet bereikbaar"}}
+  const text=q.text||code||(product&&product.name)||"";
   return {ean:code,product,query:text,prices,others,links:Shops.links(text),sources,qa:{name:product?.name,brand:product?.brand,qty:product?.qty,q:qText}};
 }
 async function fetchData(code,q,strict,known){ // opzoeken zonder iets te tekenen (ook voor verversen)
@@ -1739,6 +1861,7 @@ $("house").addEventListener("click",e=>{const q=e.target.dataset?.oq;if(q)lookup
 function sourceNote(s){
     const t=[],c=s.checkjebon;
   if(c)t.push(c.producten?`Supermarktprijzen uit Checkjebon (${c.gevonden} winkels gekoppeld, bijgewerkt ${c.bijgewerkt}${c.status==="verouderd"?", verouderd":""})`:`Supermarktprijzen niet beschikbaar (${c.status}${c.fout?": "+c.fout:""})`);
+  if(s.webshops)t.push(s.webshops.status==="ok"?`Webshops (bijgewerkt ${s.webshops.bijgewerkt}; links kunnen partnerlinks zijn: de app krijgt dan een vergoeding, jij betaalt niets extra)`:"Webshops niet bereikbaar");
   if(s.openprices&&s.openprices!=="niet gevraagd")t.push(s.openprices==="ok"?"Open Prices (gebruikersprijzen)":"Open Prices niet bereikbaar");
   return t.join(" · ")+". Supermarktprijzen zijn online prijzen; check de actie-links voor weekaanbiedingen.";
 }
@@ -1766,7 +1889,7 @@ function render(){
   const known=!!p.name&&list.length>0;$("nameForm").hidden=known;$("fixName").hidden=!known;
   $("prices").innerHTML=list.length?list.map((x,i)=>{
     const dd=best&&x.cur==="EUR"?x.price-best.price:null,u=safeUrl(x.url);
-    const name=u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.shop)}</a>`:esc(x.shop);
+    const name=u?`<a href="${esc(u)}" target="_blank" rel="${x.source==="Webshop"?"sponsored noopener":"noopener"}">${esc(x.shop)}</a>`:esc(x.shop);
     const sub=[x.matchedName?`Gevonden als: ${x.matchedName}${x.size?" ("+x.size+")":""}`:x.place,x.unit?`${eur(x.unit.v)} per ${x.unit.label}`:"",x.date&&new Date(x.date).toLocaleDateString("nl-NL",{day:"numeric",month:"short",year:"numeric"})].filter(Boolean).join(" · ");
     return `<li><div><strong>${name}</strong>${x.source!=="Checkjebon"?`<span class="src">${esc(x.source)}</span>`:""}${x.promo?'<span class="src">aanbieding</span>':""}${x.confidence==="middel"?'<span class="src warn">controleer variant</span>':""}<div class="sub">${esc(sub)}${x.mine?` <button class="del" data-del="${esc(x.id)}">verwijderen</button>`:""}</div></div><div><div class="p">${money(x.price,x.cur)}</div>${dd!=null?`<div class="diff ${dd===0?"best":""}">${dd===0?"laagste":"+"+eur(dd)}</div>`:""}</div><button class="addi" data-add="${i}" aria-label="Op lijstje ${esc(x.shop)}">${PLUSSVG}</button></li>`}).join("")
     :nOthers(d.others)?`<li><div class="mut">Geen prijs voor precies dit product. Hieronder staan andere groottes en varianten.</div></li>`
@@ -2018,12 +2141,15 @@ function localHTML(res,err){
   return `<h3>In de supermarkt</h3>`+res.map(g=>`<button class="sr" data-sq="${esc(g.q)}"><span><strong>${esc(g.name)}</strong><span class="sub">${esc(g.size)}</span></span><span class="r">${g.shops>1?`vanaf ${eur(g.minPrice)}<span class="sub">${g.shops} winkels</span>`:`${eur(g.minPrice)} · ${esc(g.cheapest)}`}</span></button>`).join("");
 }
 async function localSearch(q,max){try{return {res:Search.searchLocal(await searchIndex(),q,{max})}}catch(e){return {res:[],err:true}}}
+async function webSearch(q,max){try{const cat=await loadCatalog();return cat?Catalog.search(cat,q,max):[]}catch(e){return []}}
+const webHTML=w=>w.length?`<h3>In webshops</h3>`+w.map(g=>`<button class="sr" ${g.ean?`data-code="${esc(g.ean)}"`:`data-sq="${esc(g.name)}"`}><span><strong>${esc(g.name)}</strong></span><span class="r">${g.shops>1?`vanaf ${eur(g.minPrice)}<span class="sub">${g.shops} winkels</span>`:`${eur(g.minPrice)} · ${esc(g.cheapest)}`}</span></button>`).join(""):"";
 async function liveSearch(){
   const q=$("eanInput").value.trim(),my=++sSeq;
   if(!SEARCH||q.length<2||/^\d+$/.test(q)){$("searchOut").innerHTML="";return}
-  const {res,err}=await localSearch(q,8);
+  const [{res,err},w]=await Promise.all([localSearch(q,8),webSearch(q,6)]);
   if(my!==sSeq)return;
-  $("searchOut").innerHTML=`<div class="sres">${localHTML(res,err)}${res.length?pickHint:""}</div>`;
+  const top=w.length?res.slice(0,5):res;
+  $("searchOut").innerHTML=`<div class="sres">${top.length||!w.length?localHTML(top,err):""}${webHTML(w)}${res.length||w.length?pickHint:""}</div>`;
 }
 // Open Food Facts op naam: eerst de nieuwe zoekdienst, bij een fout of niets gevonden de oude. Alleen geslaagde zoekopdrachten worden bewaard.
 // Werkt de nieuwe dienst niet en de oude wel, dan slaat de app de nieuwe de rest van de sessie over (scheelt een verloren verzoek per zoekopdracht).
@@ -2049,9 +2175,9 @@ async function offNameSearch(q){
 const offRow=x=>`<button class="sr" data-code="${esc(x.code)}"><span><strong>${esc(x.name)}</strong><span class="sub">${esc([x.brand,x.qty].filter(Boolean).join(" · "))}${x.verdict==="ja"?" · ✓ past bij je voorkeuren":x.verdict==="nee"?` · ⚠ ${esc(x.issues.filter(i=>i.kind==="nee").map(i=>i.text).join(", "))}`:x.verdict==="onbekend"?" · ? niet zeker of het past":""}</span></span><span class="r">${x.grade?gradeBadge(x.grade):`<span class="sub">geen Nutri-Score</span>`}</span></button>`;
 async function fullSearch(q){
   const my=++sSeq;clearTimeout(sT);
-  const {res,err}=await localSearch(q,6);
+  const [{res,err},w]=await Promise.all([localSearch(q,6),webSearch(q,6)]);
   if(my!==sSeq)return;
-  const head=`<div class="sres">${res.length||err?localHTML(res,err):""}<h3>Alle voedingsmiddelen</h3>`;
+  const head=`<div class="sres">${res.length||err?localHTML(res,err):""}${webHTML(w)}<h3>Alle voedingsmiddelen</h3>`;
   const cmp=`<button class="sr" data-q="${esc(q)}"><span><strong>Prijzen vergelijken voor ‘${esc(q)}’</strong><span class="sub">zoekt per supermarkt het best passende product</span></span><span class="r">›</span></button></div>`;
   $("searchOut").innerHTML=head+`<p class="mut">Zoeken bij Open Food Facts…</p>`+cmp;
   const r=await offNameSearch(q);
