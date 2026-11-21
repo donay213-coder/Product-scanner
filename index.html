@@ -248,6 +248,11 @@ button.ghost{border:0;background:none;color:var(--ink)}
     <ul class="list" id="prices"></ul>
     <details class="srcinfo"><summary>Over deze prijzen</summary><p class="mut" id="pricesNote"></p></details>
   </div>
+  <div class="card" id="otherCard" hidden>
+    <h2 class="ch">Zoek bij de winkel</h2>
+    <p class="mut" style="margin:0 0 10px">Bekijk de actuele prijs op de site van de winkel zelf.</p>
+    <div class="chips" id="otherTop"></div>
+  </div>
   <div class="card save">
     <h2 class="ch">Bespaar meer</h2>
     <div id="house"></div><div id="others"></div>
@@ -257,7 +262,7 @@ button.ghost{border:0;background:none;color:var(--ink)}
       <div id="altOut" aria-live="polite"></div>
     </div>
   </div>
-  <div class="card">
+  <div class="card" id="promoCard">
     <h2 class="ch">In de aanbieding?</h2>
     <p class="mut" style="margin:0 0 10px">Bekijk de actie van deze week bij de winkel zelf.</p>
     <div class="chips" id="promos"></div>
@@ -274,6 +279,8 @@ button.ghost{border:0;background:none;color:var(--ink)}
     <p class="mut">Prijzen die je zelf invoert worden op dit apparaat bewaard en tellen mee in de vergelijking.</p>
     <h3>Zoek in de supermarkt</h3>
     <div class="chips" id="chips"></div>
+    <h3>Andere winkels</h3>
+    <div class="chips" id="otherShops"></div>
     <h3>Webshops en prijsvergelijkers</h3>
     <div class="chips" id="webshops"></div>
   </details>
@@ -374,7 +381,7 @@ button.ghost{border:0;background:none;color:var(--ink)}
       <li>Je voorkeuren en allergieën worden nooit verstuurd: het filteren gebeurt op je telefoon.</li>
       <li>Wat de telefoon wel verlaat:
         <ul>
-          <li>bij scannen en verversen: de barcode of productnaam naar Open Food Facts en Open Prices;</li>
+          <li>bij scannen en verversen: de barcode of productnaam naar Open Food Facts en Open Prices; kent Open Food Facts de barcode niet, dan ook naar Open Beauty Facts en Open Products Facts (van dezelfde organisatie);</li>
           <li>bij zoeken op naam: je zoekwoorden naar Open Food Facts (search.openfoodfacts.org), maar pas als je op Zoek drukt. Wat je tijdens het typen ziet, wordt op je telefoon gezocht;</li>
           <li>bij "Gezondere keuzes": de productcategorie naar Open Food Facts;</li>
           <li>bij "Prijzen van een maand geleden": een vraag aan GitHub (api.github.com) welke versie van de supermarktprijzen bij die datum hoort, en die versie via jsDelivr of GitHub;</li>
@@ -384,13 +391,14 @@ button.ghost{border:0;background:none;color:var(--ink)}
           <li>productfoto's van Open Food Facts.</li>
         </ul>
         Deze diensten zien, zoals elke website, je IP-adres. De app wordt gehost op GitHub Pages; ook GitHub ziet je IP-adres als je de app opent.</li>
-      <li>Links naar winkels, folders en webshops openen pas als je erop tikt.</li>
+      <li>Links naar winkels, folders en webshops openen pas als je erop tikt. Bij sommige winkels (zoals Gamma en Hema) zoekt de knop via DuckDuckGo binnen de site van die winkel.</li>
     </ul>
     <h3>Geen medisch advies</h3>
     <p>Nutri-Score, allergenen, vegetarisch/vegan en halal-keurmerken komen uit Open Food Facts, ingevuld door vrijwilligers, en kunnen onvolledig of verouderd zijn. Dit is geen medisch advies: controleer altijd de verpakking.</p>
     <h3>Bronnen en licenties</h3>
     <ul>
       <li><a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>: productgegevens onder de Open Database License (ODbL), losse gegevens onder de Database Contents License, productfoto's onder Creative Commons Naamsvermelding-GelijkDelen (CC BY-SA).</li>
+      <li><a href="https://world.openbeautyfacts.org" target="_blank" rel="noopener">Open Beauty Facts</a> en <a href="https://world.openproductsfacts.org" target="_blank" rel="noopener">Open Products Facts</a>: productgegevens van verzorging en andere producten, onder dezelfde licenties als Open Food Facts.</li>
       <li><a href="https://prices.openfoodfacts.org" target="_blank" rel="noopener">Open Prices</a> van Open Food Facts: door gebruikers ingestuurde prijzen onder de Open Database License (ODbL).</li>
       <li><a href="https://www.checkjebon.nl" target="_blank" rel="noopener">Checkjebon</a>: online supermarktprijzen onder de MIT-licentie.</li>
       <li>ZXing (barcodelezer): Apache-licentie 2.0.</li>
@@ -407,7 +415,7 @@ button.ghost{border:0;background:none;color:var(--ink)}
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-75a40b0";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-0425f88";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -846,10 +854,25 @@ const WEBSHOPS = [
   ['bol', (q) => `https://www.bol.com/nl/nl/s/?searchtext=${e(q)}`],
   ['Amazon.nl', (q) => `https://www.amazon.nl/s?k=${e(q)}`],
   ['Coolblue', (q) => `https://www.coolblue.nl/zoeken?query=${e(q)}`],
+];
+
+// Andere winkels (bouwmarkten, warenhuizen, drogisten). Hun prijzen zitten niet in een open bron; de knop opent de
+// winkel zelf. Waar het zoekadres van de winkel niet gecontroleerd is, zoekt DuckDuckGo alleen binnen die winkelsite.
+const siteSearch = (domain) => (q) => `https://duckduckgo.com/?q=${e('site:' + domain + ' ' + q)}`;
+const OTHER = [
+  ['Gamma', siteSearch('gamma.nl')],
+  ['Karwei', siteSearch('karwei.nl')],
+  ['Praxis', siteSearch('praxis.nl')],
+  ['Hornbach', (q) => `https://www.hornbach.nl/s/${e(q)}`],
+  ['Hubo', siteSearch('hubo.nl')],
+  ['Hema', siteSearch('hema.nl')],
+  ['Blokker', siteSearch('blokker.nl')],
+  ['Xenos', siteSearch('xenos.nl')],
+  ['Action', (q) => `https://www.action.com/nl-nl/search/?q=${e(q)}`],
   ['Kruidvat', (q) => `https://www.kruidvat.nl/search?q=${e(q)}`],
   ['Etos', (q) => `https://www.etos.nl/search/?q=${e(q)}`],
-  ['Action', (q) => `https://www.action.com/nl-nl/search/?q=${e(q)}`],
 ];
+const OTHER_SHOPS = OTHER.map(([n]) => n);
 
 const DEAL_SITES = [
   ['Beste aanbiedingen (Supermarktscanner)', 'https://supermarktscanner.nl/beste-supermarkt-aanbiedingen'],
@@ -866,6 +889,7 @@ function links(text) {
   return {
     shops: Object.values(CHAINS).filter((c) => c.search).map((c) => ({ name: c.name, url: c.search(text) })),
     webshops: WEBSHOPS.map(([name, f]) => ({ name, url: f(text) })),
+    others: OTHER.map(([name, f]) => ({ name, url: f(text) })),
     promos: [
       ...Object.values(CHAINS).filter((c) => c.promo).map((c) => ({ name: `${c.name} aanbiedingen`, url: c.promo })),
       ...DEAL_SITES.map(([name, url]) => ({ name, url })),
@@ -882,7 +906,7 @@ const HOUSE = {
 };
 // Ketens waar eigen producten geen merknaam in de naam hebben ("Hagelslag melk" bij Lidl).
 const HOUSE_GENERIC = ['lidl', 'aldi'];
-const API = { CHAINS, chainInfo, links, HOUSE, HOUSE_GENERIC };
+const API = { CHAINS, chainInfo, links, HOUSE, HOUSE_GENERIC, OTHER_SHOPS };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else globalThis.Shops = API;
 
 })();</script>
@@ -1519,9 +1543,10 @@ const TANK=["Shell","BP","Esso","TinQ","Tango","Texaco","TotalEnergies","Q8","Ar
 let customShops=store.get("customShops",[]),names=store.get("names",{});
 const groupOpts=(label,arr,cnt)=>arr.length?`<optgroup label="${esc(label)}">${arr.map(n=>{const c=cnt?cnt(n):0;return `<option value="${esc(n)}">${esc(n)}${c?` (${c})`:""}</option>`}).join("")}</optgroup>`:"";
 function shopOptions(cnt,extra){
-  const known=new Set([...BASESHOPS,...TANK,...customShops]);
+  const OTH=(typeof Shops!=="undefined"&&Shops.OTHER_SHOPS||[]).filter(n=>!BASESHOPS.includes(n));
+  const known=new Set([...BASESHOPS,...OTH,...TANK,...customShops]);
   const other=(extra||[]).filter(n=>!known.has(n));
-  return groupOpts("Supermarkten en drogisten",BASESHOPS,cnt)+groupOpts("Tankstations",TANK,cnt)+groupOpts("Eigen winkels",customShops,cnt)+groupOpts("Overig",other,cnt);
+  return groupOpts("Supermarkten en drogisten",BASESHOPS,cnt)+groupOpts("Andere winkels",OTH,cnt)+groupOpts("Tankstations",TANK,cnt)+groupOpts("Eigen winkels",customShops,cnt)+groupOpts("Overig",other,cnt);
 }
 function addCustomShop(n){
   n=String(n||"").trim().slice(0,40);if(!n)return "";
@@ -1624,14 +1649,19 @@ function loadCjb(strict){
   if(!cjbP)cjbP=fetchCjb().finally(()=>{cjbP=null});
   return cjbP.catch(e=>{if(cjb&&!strict)return cjb;throw e});
 }
+const NONFOOD_DBS=[["Open Beauty Facts","world.openbeautyfacts.org"],["Open Products Facts","world.openproductsfacts.org"]];
 async function viaBrowser(code,qText,strict,known){ // known: {name,brand,qty} = productgegevens die we al hebben, dan geen Open Food Facts-opvraging // zonder server: alles in de browser
   // Elke bron een eigen tijdslimiet: een hangende server mag de scan niet laten vastlopen.
   const [p,pr]=await Promise.allSettled([
     code&&!known?withTimeout(getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url,nutriscore_grade,nova_group,ecoscore_grade,categories_tags,ingredients_analysis_tags,allergens_tags,traces_tags,states_tags,labels_tags,ingredients_tags`),12000):null,
     code?withTimeout(getJSON(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${code}&size=100&order_by=-date`),6000):null
   ]);
-  const o=p.status==="fulfilled"&&p.value&&p.value.status===1?p.value.product:null;
-  const product=known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed"),...(typeof Health!=="undefined"?Health.halalInfo(o):{})}:null;
+  let o=p.status==="fulfilled"&&p.value&&p.value.status===1?p.value.product:null,nonfood="";
+  if(code&&!known&&!o){ // niet in Open Food Facts: misschien verzorging of gereedschap (zelfde open organisatie)
+    const alt=await Promise.allSettled(NONFOOD_DBS.map(([,h])=>withTimeout(getJSON(`https://${h}/api/v2/product/${code}.json?fields=product_name,product_name_nl,brands,quantity,image_front_small_url,image_front_url`),8000)));
+    alt.forEach((v,i)=>{if(!o&&v.status==="fulfilled"&&v.value&&v.value.status===1){o=v.value.product;nonfood=NONFOOD_DBS[i][0]}});
+  }
+  const product=nonfood?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:"",nova:"",eco:"",nonfood}:known?{name:known.name||"",brand:known.brand||"",qty:known.qty||"",img:"",nutri:"",nova:"",eco:""}:o?{name:o.product_name_nl||o.product_name||"",brand:(o.brands||"").split(",")[0].trim(),qty:o.quantity||"",img:o.image_front_small_url||o.image_front_url||"",nutri:o.nutriscore_grade||"",nova:o.nova_group||"",eco:o.ecoscore_grade||"",cats:o.categories_tags||[],diet:o.ingredients_analysis_tags||[],alg:o.allergens_tags||[],traces:o.traces_tags||[],ingDone:(o.states_tags||[]).includes("en:ingredients-completed"),...(typeof Health!=="undefined"?Health.halalInfo(o):{})}:null;
   const prices=[],seen=new Set(),sources={standalone:true,openprices:!code?"niet gevraagd":pr.status==="fulfilled"?"ok":"niet bereikbaar"};
   if(pr.status==="fulfilled"&&pr.value)for(const it of pr.value.items||[]){
     if(it.price==null)continue;const L=it.location||{};const shop=L.osm_name||"Onbekende winkel",place=[L.osm_address_city,L.osm_address_country].filter(Boolean).join(", ");
@@ -1728,7 +1758,7 @@ function render(){
   const d=current.data,p=d.product||{},title=p.name||(d.query&&!current.code?d.query:"Onbekend product");
   $("prod").innerHTML=`${p.img?`<img src="${esc(safeUrl(p.img))}" alt="">`:`<div class="ph"></div>`}<div><h3>${esc(title)}</h3><div class="mut">${esc([p.brand,p.qty].filter(Boolean).join(" · ")||(p.name?"":"Typ hieronder de naam om toch te vergelijken"))}</div>${current.code?`<div class="mut">EAN ${esc(current.code)}</div>`:""}</div>`;
   $("nameInput").value=d.query&&d.query!==current.code?d.query:"";
-  $("grades").innerHTML=gradesHTML(d.product);
+  $("grades").innerHTML=p.nonfood?"":gradesHTML(d.product);
   const list=collectPrices(),eurs=list.filter(x=>x.cur==="EUR"),best=eurs[0];
   const bsub=[best&&best.unit?`${eur(best.unit.v)} per ${best.unit.label==="l"?"liter":best.unit.label==="kg"?"kilo":"stuk"}`:"",eurs.length>1?`tot ${eur(eurs[eurs.length-1].price-best.price)} goedkoper dan elders`:""].filter(Boolean).join(" · ");
   $("best").innerHTML=best?`<div class="answer"><div class="arow"><div><div class="alab">Hier het goedkoopst</div><div class="where">${esc(best.shop)}${best.place?`<span class="place">${esc(best.place)}</span>`:""}</div></div><div class="big">${eur(best.price)}</div></div>${bsub?`<div class="asub">${esc(bsub)}</div>`:""}<button class="abtn" data-add="0">${PLUSSVG} Op lijstje ${esc(best.shop)}</button></div>`:"";
@@ -1749,6 +1779,8 @@ function render(){
   $("promos").innerHTML=L?chipHTML(L.promos):"";
   $("chips").innerHTML=L?chipHTML(L.shops):SHOPS.map(s=>`<a href="${s[1]}${q}" target="_blank" rel="noopener">${esc(s[0])} ↗</a>`).join("");
   $("webshops").innerHTML=L?chipHTML(L.webshops):"";
+  $("otherTop").innerHTML=$("otherShops").innerHTML=L&&L.others?chipHTML(L.others):"";
+  $("otherCard").hidden=!(L&&L.others&&(p.nonfood||!list.length));$("promoCard").hidden=!!p.nonfood;
   renderAllergens();renderPrefBadge();renderAlt();renderOldWrap();
 }
 
@@ -1803,7 +1835,7 @@ $("prefAlg").addEventListener("change",e=>{
 });
 function renderPrefBadge(){
   const el=$("prefBadge");el.innerHTML="";
-  if(!prefsOn()||!current||!current.data.product||!current.data.product.name)return;
+  if(!prefsOn()||!current||!current.data.product||!current.data.product.name||current.data.product.nonfood)return;
   const r=Health.checkPrefs(current.data.product,prefs);if(!r.verdict)return;
   const bad=r.issues.filter(i=>i.kind==="nee").map(i=>i.text),unk=r.issues.filter(i=>i.kind==="onbekend").map(i=>i.text);
   el.innerHTML=(r.verdict==="ja"?`<div class="pref ok">✓ Past bij je voorkeuren, volgens Open Food Facts.</div>`
@@ -2063,7 +2095,7 @@ function loadOld(){
 const oldMsg=e=>e&&e.rate?"GitHub staat een beperkt aantal opvragingen per uur toe. Probeer het later opnieuw.":"Ophalen lukt nu niet. Probeer het later opnieuw.";
 function renderOldWrap(){
   if(oldFor!==current){$("oldOut").innerHTML="";oldFor=current}
-  $("oldWrap").hidden=!(HIST&&current&&current.data.qa&&(current.data.qa.name||current.data.qa.q));
+  $("oldWrap").hidden=!(HIST&&current&&current.data.qa&&(current.data.qa.name||current.data.qa.q))||!!current.data.product?.nonfood;
 }
 async function showOld(){
   const mine=current;if(!mine||!HIST)return;
