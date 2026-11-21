@@ -97,6 +97,7 @@ a.btn{text-decoration:none}a.btn.pri{background:var(--ink);color:var(--bg)}
 .qty{display:flex;align-items:center;gap:4px;justify-content:flex-end}.qty button{width:36px;min-height:36px;padding:0;justify-content:center}
 .lt{text-align:right;font-weight:800;white-space:nowrap}
 .tot{display:flex;justify-content:space-between;font-weight:800;font-size:18px;padding:12px 0 4px}
+.upd{position:sticky;top:0;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--ink);color:var(--bg);padding:10px 14px;font-weight:600}.upd[hidden]{display:none}.upd button{flex:none;white-space:nowrap;background:var(--bg);color:var(--ink);border:0;border-radius:8px;padding:8px 14px;font:inherit;min-height:40px;cursor:pointer}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:9;max-width:90vw;text-align:center}
 .addform{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;gap:8px;margin-bottom:12px}
 @media(max-width:480px){.addform{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.addform button{grid-column:1/-1}}
@@ -117,6 +118,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 </head>
 <body>
 <main>
+<div id="updBar" class="upd" role="status" hidden></div>
 <header><h1>Prijs<span>scanner</span></h1><span class="mut">Scan, vergelijk, bespaar</span></header>
 <nav class="tabs" aria-label="Weergave">
   <button id="tabScan" aria-pressed="true">Scannen</button>
@@ -309,7 +311,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-20-fd2f0c9";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-54d0904";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -1657,6 +1659,20 @@ async function runDiag(){
   }
 }
 $("appVersion").textContent=window.APP_VERSION||"ontwikkelversie";
+/* ---------- Nieuwe versie? Een tabblad dat lang open staat, draait anders oude code ---------- */
+let updAt=Date.now();
+async function checkUpdate(){
+  if(!window.APP_VERSION||Date.now()-updAt<30*60e3)return;
+  updAt=Date.now();
+  try{
+    // cache "reload": haalt de pagina vers op én ververst de browsercache, zodat Vernieuwen meteen de nieuwe versie laadt
+    const t=await (await fetch(location.pathname,{cache:"reload"})).text();
+    const v=(t.match(/window\.APP_VERSION="(\d{4}-\d\d-\d\d-[0-9a-f]+)"/)||[])[1];
+    if(v&&v!==window.APP_VERSION){$("updBar").innerHTML=`<span>Er is een nieuwe versie van de app.</span><button data-upd="1">Vernieuwen</button>`;$("updBar").hidden=false}
+  }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
+$("updBar").addEventListener("click",e=>{if(e.target.dataset?.upd)location.reload()});
 $("diagCard").hidden=!DIAG;$("diagCopy").hidden=true;
 $("diagBtn").addEventListener("click",runDiag);
 $("diagCopy").addEventListener("click",async()=>{
