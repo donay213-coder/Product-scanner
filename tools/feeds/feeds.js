@@ -20,6 +20,7 @@ const FIELDS = {
   shop: ['merchant_name', 'advertiser_name', 'advertiser', 'shop', 'programname', 'program_name', 'store'],
   stock: ['in_stock', 'instock', 'availability', 'stock', 'stock_quantity', 'voorraad'],
   brand: ['brand_name', 'brand', 'merk', 'manufacturer'],
+  currency: ['currency', 'price_currency', 'search_price_currency', 'valuta'],
 };
 
 function parsePrice(v) {
@@ -57,7 +58,16 @@ function shopFromHost(h) {
   const base = h.split('.').slice(-2, -1)[0] || h;
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
-const shopClean = (s) => clean(s).replace(/\s+(NL|BE|Nederland|België)$/i, '').replace(/\.(nl|be|com)$/i, '');
+// Namen uit de netwerken ("HEMA NL", "XENOS", "praxis.nl") worden de namen die de app gebruikt.
+const CANON = new Map(Object.values(KNOWN).map((n) => [n.toLowerCase().replace(/\s+/g, ''), n]));
+const shopClean = (s) => {
+  const n = clean(s).replace(/\s+-?\s*(NL|Nederland|Netherlands)$/i, '').replace(/\.(nl|com)$/i, '');
+  return CANON.get(n.toLowerCase().replace(/\s+/g, '')) || n;
+};
+// Alleen Nederlandse prijzen: Belgische (of andere) winkels en andere valuta niet.
+const foreign = (shop, host, cur) =>
+  /(\s|-|\.)(BE|België|Belgie|Belgium|Belgique|DE|UK|FR)$/i.test(clean(shop)) || /\.be$/i.test(host || '') ||
+  (!!cur && !/^(EUR|€)$/i.test(clean(cur)));
 
 // ---- CSV ----
 function parseCSV(text) {
@@ -122,7 +132,9 @@ function parseFeed(text, { name = '' } = {}) {
     const base = parsePrice(pick(o, FIELDS.price)), sale = parsePrice(pick(o, FIELDS.sale));
     const price = base && sale ? Math.min(base, sale) : base || sale;
     const url = clean(pick(o, FIELDS.url));
-    const shop = name || shopClean(pick(o, FIELDS.shop)) || shopFromHost(targetHost(url));
+    const host = targetHost(url), feedShop = pick(o, FIELDS.shop);
+    if (foreign(feedShop, host, pick(o, FIELDS.currency))) continue;
+    const shop = shopClean(name) || shopClean(feedShop) || shopFromHost(host);
     out.push({ shop, name: nm, price, ean: cleanEan(pick(o, FIELDS.ean)), url, inStock: stockOf(pick(o, FIELDS.stock)) });
   }
   return out;
