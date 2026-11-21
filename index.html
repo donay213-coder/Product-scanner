@@ -103,6 +103,7 @@ a.btn{text-decoration:none}a.btn.pri{background:var(--ink);color:var(--bg)}
 .addform{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;gap:8px;margin-bottom:12px}
 @media(max-width:480px){.addform{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.addform button{grid-column:1/-1}}
 .br{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.br3{grid-template-columns:minmax(0,1fr) 44px minmax(76px,auto);align-items:center}.addall,.addall-gap{width:44px;height:44px}.addall{display:flex;align-items:center;justify-content:center;padding:0;border-radius:99px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}.addall:active{background:var(--tag);color:#111;border-color:var(--tag)}
 .br:last-child{border:0}.br.best strong{background:var(--tag);color:#111;padding:0 6px}
 .sav{background:var(--bg-ok,rgba(10,122,61,.12));border-radius:10px;padding:10px 12px;margin-top:10px;font-size:15px}
 details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
@@ -314,7 +315,7 @@ details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;f
 <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-7ebf26f";</script>
+<script>window.STANDALONE=true;window.APP_VERSION="2026-11-21-70a94f4";</script>
 <script>(function(){
 'use strict';
 // Productnamen en verpakkingsgroottes normaliseren en supermarktproducten aan elkaar koppelen.
@@ -2082,7 +2083,9 @@ function renderBasket(){
   $("basketCard").hidden=false;
   const first=r.rows.find(x=>x.complete),n=r.priced;
   let h=first?`<p style="margin:6px 0">Goedkoopst bij <strong>${esc(first.shop)}</strong>: ${eur(first.total)}</p>`:`<p style="margin:6px 0">Geen enkele winkel heeft alle ${n} producten. De meeste (${r.rows[0].have} van ${n}) heeft <strong>${esc(r.rows[0].shop)}</strong>.</p>`;
-  h+=r.rows.slice(0,6).map(x=>`<div class="br${first&&x===first?" best":""}"><div><strong>${esc(x.shop)}</strong><div class="sub">${x.complete?(n===1?"1 product":`alle ${n} producten`):`${x.have} van ${n} producten${x.missing.length?`, mist: ${esc(x.missing.slice(0,3).join(", "))}${x.missing.length>3?"…":""}`:""}`}</div></div><div class="p">${eur(x.total)}${first&&x.complete&&x!==first?`<div class="diff">+ ${eur(x.total-first.total)}</div>`:""}</div></div>`).join("");
+  const kk=y=>y.ean||y.name.toLowerCase();
+  const canMove=shop=>($("basketAll").checked||shop!==listShop)&&!bi.every(b=>!b.pm||b.pm[shop]==null||(lists[shop]||[]).some(y=>!y.done&&kk(y)===b.key));
+  h+=r.rows.slice(0,6).map(x=>`<div class="br br3${first&&x===first?" best":""}"><div><strong>${esc(x.shop)}</strong><div class="sub">${x.complete?(n===1?"1 product":`alle ${n} producten`):`${x.have} van ${n} producten${x.missing.length?`, mist: ${esc(x.missing.slice(0,3).join(", "))}${x.missing.length>3?"…":""}`:""}`}</div></div>${canMove(x.shop)?`<button class="addall" data-act="moveall" data-shop="${esc(x.shop)}" aria-label="Alles op het lijstje van ${esc(x.shop)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="pointer-events:none"><path d="M12 5v14M5 12h14"/></svg></button>`:`<span class="addall-gap"></span>`}<div class="p">${eur(x.total)}${first&&x.complete&&x!==first?`<div class="diff">+ ${eur(x.total-first.total)}</div>`:""}</div></div>`).join("");
   const pair=typeof Deals!=="undefined"?Deals.bestPair(bi):null;
   if(pair){
     const by=s=>pair.picks.filter(x=>x.shop===s).map(x=>(x.qty>1?x.qty+"x ":"")+esc(x.name)).join(", ");
@@ -2100,7 +2103,17 @@ function renderBasket(){
 let splitUndo=null;
 function applySplit(){
   const pair=Deals.bestPair(basketItems($("basketAll").checked));if(!pair)return;
-  const before=JSON.stringify(lists),to=new Map(pair.picks.map(p=>[p.key,p])),src=$("basketAll").checked?Object.keys(lists):[listShop];
+  const moved=moveItems(new Map(pair.picks.map(p=>[p.key,p])),pair.shops[0]);
+  toast(`${moved} ${moved===1?"product":"producten"} verdeeld over ${pair.shops.join(" en ")}`);
+}
+function moveAll(shop){
+  const to=new Map(basketItems($("basketAll").checked).filter(b=>b.pm&&b.pm[shop]!=null).map(b=>[b.key,{shop,price:b.pm[shop]}]));
+  const moved=moveItems(to,shop);
+  toast(`${moved} ${moved===1?"product":"producten"} op het lijstje van ${shop}`);
+}
+// to: product → {shop, price}. Verplaatst niet-afgevinkte producten, onthoudt hoe het was (Terugzetten).
+function moveItems(to,goShop){
+  const before=JSON.stringify(lists),src=$("basketAll").checked?Object.keys(lists):[listShop];
   const k=x=>x.ean||x.name.toLowerCase();let moved=0;
   for(const s of src)for(const x of [...(lists[s]||[])]){
     const p=!x.done&&to.get(k(x));if(!p||p.shop===s)continue;
@@ -2110,15 +2123,15 @@ function applySplit(){
     moved++;
   }
   splitUndo={before,shop:listShop,after:JSON.stringify(lists)};
-  listShop=pair.shops[0];store.set("listShop",listShop);
-  saveLists();renderLists();toast(`${moved} ${moved===1?"product":"producten"} verdeeld over ${pair.shops.join(" en ")}`);
+  listShop=goShop;store.set("listShop",listShop);
+  saveLists();renderLists();return moved;
 }
 function undoSplit(){
   if(!splitUndo)return;
   if(JSON.stringify(lists)!==splitUndo.after){splitUndo=null;renderLists();toast("Terugzetten kan niet meer: je lijstjes zijn intussen veranderd");return}
   lists=JSON.parse(splitUndo.before);listShop=splitUndo.shop;store.set("listShop",listShop);splitUndo=null;saveLists();renderLists();toast("Lijstjes teruggezet");
 }
-$("basket").addEventListener("click",e=>{const a=e.target.dataset?.act;if(a==="split")applySplit();else if(a==="unsplit")undoSplit()});
+$("basket").addEventListener("click",e=>{const d=e.target.dataset||{},a=d.act;if(a==="split")applySplit();else if(a==="unsplit")undoSplit();else if(a==="moveall"&&d.shop)moveAll(d.shop)});
 function renderLists(){
   const cnt=n=>(lists[n]||[]).filter(x=>!x.done).length;
   if(!listShop)listShop=[...BASESHOPS,...TANK,...customShops,...Object.keys(lists)].find(n=>(lists[n]||[]).length)||BASESHOPS[0];
